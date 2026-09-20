@@ -9,6 +9,9 @@
  *
  * Run: npm run check:i18n -w @phone-erp/web
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 const LOCALES = ['en', 'fr', 'ar'];
 
 const PLURAL_SUFFIX = /_(zero|one|two|few|many|other)$/;
@@ -20,22 +23,36 @@ const PLURAL_SUFFIX = /_(zero|one|two|few|many|other)$/;
  */
 const baseOf = (key) => key.replace(PLURAL_SUFFIX, '');
 
-const load = async (locale) => {
-  const { default: dict } = await import(`../src/i18n/locales/${locale}.ts`);
-  return { locale, keys: new Set(Object.keys(dict).map(baseOf)) };
+/**
+ * The dictionaries are TypeScript modules. Reading them here as text — rather
+ * than importing them — keeps this guard runnable on any Node version without
+ * flagging TS or relying on the runtime's type-stripping. The keys are the part
+ * that matters for parity; apostrophes and the plural families cited above are
+ * the only edge cases worth defending against.
+ */
+const dictFrom = (locale) => {
+  const source = readFileSync(join(import.meta.dirname, '..', 'src', 'i18n', 'locales', `${locale}.ts`), 'utf8');
+  const keys = new Set();
+  // Matches lines like `  'stock.imei': 'IMEI',` — the guard spans exactly one
+  // line per key. Something prettier (a multi-line phrase) would be a bigger
+  // change to the dictionaries than a better regex.
+  for (const match of source.matchAll(/'([^']+)':[^,]+/g)) {
+    keys.add(baseOf(match[1]));
+  }
+  return { locale, keys };
 };
 
 const diff = (a, b) => [...b].filter((key) => !a.has(key));
 
-const dicts = await Promise.all(LOCALES.map(load));
+const dicts = LOCALES.map(dictFrom);
 const en = dicts.find((d) => d.locale === 'en');
 
 let failed = false;
 let output = [];
 
 for (const other of dicts.filter((d) => d.locale !== 'en')) {
-  const missing = diff(en.keys, other.keys);
-  const extra = diff(other.keys, en.keys);
+  const missing = diff(en.keys, other.keys).map(baseOf);
+  const extra = diff(other.keys, en.keys).map(baseOf);
 
   if (missing.length > 0) {
     failed = true;
