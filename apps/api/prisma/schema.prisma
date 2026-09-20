@@ -1,0 +1,1002 @@
+// Phone distribution ERP — PostgreSQL schema.
+//
+// Design rule: the IMEI is the physical device identity. There is no second
+// "device code". Stock is never stored as an editable number: every quantity in
+// the application is derived from Device rows, and every change of a Device is
+// accompanied by an immutable DeviceMovement row.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  WAREHOUSE_USER
+}
+
+enum DeviceStatus {
+  EXPECTED
+  RECEIVED // received but awaiting validation — not yet sellable
+  PENDING_IDENTIFICATION // serial known, IMEI not yet read (*#06#) — not sellable
+  IN_STOCK
+  IN_TRANSFER
+  SOLD
+  RETURNED
+  DAMAGED
+  LOST
+}
+
+enum PurchaseStatus {
+  DRAFT
+  ORDERED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+enum ReceiptStatus {
+  PENDING_VALIDATION
+  VALIDATED
+}
+
+enum ReceiptSource {
+  PURCHASE
+  TRANSFER
+}
+
+enum TransferStatus {
+  DRAFT
+  READY
+  IN_TRANSIT
+  RECEIVED
+  CANCELLED
+}
+
+enum ShipmentStatus {
+  PREPARING
+  IN_TRANSIT
+  DELIVERED
+  RECEIVED
+}
+
+enum SaleStatus {
+  DRAFT
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum ReturnStatus {
+  RETURNED
+  INSPECTION
+  RESTOCKED
+  DAMAGED
+}
+
+enum MovementType {
+  PURCHASE_RECEIPT
+  TRANSFER_OUT
+  TRANSFER_IN
+  SALE
+  RETURN
+  ADJUSTMENT
+  IDENTIFIED
+}
+
+/// How a product's stock is counted.
+///
+/// SERIALIZED is a phone: every unit carries an IMEI, is its own Device row,
+/// and is costed specifically. BULK is an accessory — a cable, a case, a
+/// charger — where the units are genuinely identical and nothing distinguishes
+/// one from another, so the only honest answer is a quantity and an average
+/// cost. Do not reach for BULK to avoid scanning phones: it permanently gives
+/// up per-unit traceability and profit.
+enum TrackingMode {
+  SERIALIZED
+  BULK
+}
+
+enum Currency {
+  EUR
+  USD
+  DZD
+}
+
+/// What a cost document represents. Kept to the categories that actually appear
+/// on the invoices this business receives.
+enum CostType {
+  PURCHASE
+  HANDLING
+  FREIGHT
+  CUSTOMS
+  INSURANCE
+  OTHER
+}
+
+/// How one bill is spread across the units it applies to.
+/// Weight and volume are deliberately absent: handsets differ by grams, so
+/// quantity and value cover every invoice seen so far. Add them when one does not.
+enum AllocationMethod {
+  QUANTITY
+  VALUE
+  MANUAL
+}
+
+/// What a cost document attaches to, which determines the units it covers.
+enum CostScope {
+  RECEIPT
+  SHIPMENT
+  LOT
+  DEVICES
+}
+
+enum CostDocumentStatus {
+  DRAFT
+  POSTED
+  REVERSED
+}
+
+/// Where a sale came from. POS is a counter sale in Algeria; the model is shared
+/// with B2B so there is only ever one source of sales truth.
+/// What happened, and therefore what the message says.
+enum NotificationEvent {
+  PURCHASE_RECEIVED
+  SHORT_DELIVERY
+  RECEIPT_VALIDATED
+  TRANSFER_SHIPPED
+  TRANSFER_RECEIVED
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum SalesChannel {
+  B2B
+  POS
+}
+
+// ---------------------------------------------------------------------------
+// Organisation
+// ---------------------------------------------------------------------------
+
+/// A country the business operates in. France and Spain source and hold stock;
+/// Algeria holds stock and sells. The currency here is the one local costs are
+/// naturally billed in.
+model Country {
+  id        String   @id @default(uuid())
+  code      String   @unique // FR, ES, DZ
+  name      String
+  currency  Currency @default(EUR)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  warehouses Warehouse[]
+  suppliers  Supplier[]
+  priceList  ProductPrice[]
+
+  @@index([isActive])
+}
+
+model Warehouse {
+  id        String   @id @default(uuid())
+  name      String
+  code      String   @unique
+  /// Free-text country name, kept for display and for data that predates Country.
+  country   String
+  countryId String?
+  /// A photo of the building, shown on the stock cards. Null for none.
+  imageUrl  String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  countryRef     Country?         @relation(fields: [countryId], references: [id], onDelete: SetNull)
+  costCenters    CostCenter[]
+  users          User[]
+  lots           Lot[]
+  devices        Device[]         @relation("DeviceCurrentWarehouse")
+  purchases      Purchase[]
+  transfersOut   Transfer[]       @relation("TransferSource")
+  transfersIn    Transfer[]       @relation("TransferDestination")
+  sales          Sale[]
+  returns        Return[]
+  movementsFrom  DeviceMovement[] @relation("MovementFrom")
+  movementsTo    DeviceMovement[] @relation("MovementTo")
+  stockLevels    StockLevel[]
+  stockMovements StockMovement[]
+  receipts       Receipt[]
+
+  @@index([isActive])
+  @@index([countryId])
+}
+
+model CostCenter {
+  id          String   @id @default(uuid())
+  name        String
+  code        String   @unique
+  warehouseId String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  warehouse Warehouse? @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  users     User[]
+
+  @@index([warehouseId])
+}
+
+model User {
+  id            String    @id @default(uuid())
+  name          String
+  email         String    @unique
+  passwordHash  String
+  role          Role      @default(WAREHOUSE_USER)
+  warehouseId   String?
+  costCenterId  String?
+  isActive      Boolean   @default(true)
+  // Bumped on password change / deactivation so already-issued JWTs stop working.
+  tokenVersion  Int       @default(0)
+  /// Whether this person wants the operational emails at all.
+  notifyByEmail Boolean   @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  warehouse  Warehouse?  @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  costCenter CostCenter? @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+
+  auditLogs         AuditLog[]
+  movements         DeviceMovement[]
+  stockMovements    StockMovement[]
+  purchasesCreated  Purchase[]       @relation("PurchaseCreatedBy")
+  transfersCreated  Transfer[]       @relation("TransferCreatedBy")
+  salesCreated      Sale[]           @relation("SaleCreatedBy")
+  returnsCreated    Return[]         @relation("ReturnCreatedBy")
+  shipmentsShipped  Shipment[]       @relation("ShipmentShippedBy")
+  shipmentsReceived Shipment[]       @relation("ShipmentReceivedBy")
+  receiptsCreated   Receipt[]        @relation("ReceiptCreatedBy")
+  receiptsValidated Receipt[]        @relation("ReceiptValidatedBy")
+  costDocsCreated   CostDocument[]   @relation("CostDocumentCreatedBy")
+  costDocsPosted    CostDocument[]   @relation("CostDocumentPostedBy")
+  pricesCreated     ProductPrice[]   @relation("ProductPriceCreatedBy")
+
+  @@index([warehouseId])
+  @@index([isActive])
+}
+
+// ---------------------------------------------------------------------------
+// Catalogue and partners
+// ---------------------------------------------------------------------------
+
+/// A make: Apple, Samsung, Xiaomi.
+///
+/// Brands are the top level of the stock browser — the way someone actually
+/// looks for a handset — so they are a table rather than free text on each
+/// product. Free text meant "Apple", "apple" and "APPLE " were three makes.
+model Brand {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  /// Logo, shown on the brand cards. Null for none.
+  imageUrl  String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+
+  @@index([isActive])
+}
+
+model Product {
+  id               String       @id @default(uuid())
+  name             String
+  sku              String       @unique
+  /// The EAN-13 printed on the box, shared by every unit of the model.
+  ///
+  /// It identifies the product, never a handset — which is exactly why the
+  /// scanner refuses it during goods-in. Holding it here lets a scan of the box
+  /// at least say which product it is.
+  barcode          String?      @unique
+  brandId          String
+  model            String
+  storage          String?
+  color            String?
+  category         String?
+  purchasePrice    Decimal      @db.Decimal(14, 2)
+  defaultSalePrice Decimal      @db.Decimal(14, 2)
+  currency         Currency     @default(EUR)
+  tracking         TrackingMode @default(SERIALIZED)
+  /// Path to the product photo, relative to the site root, or null for none.
+  ///
+  /// The file itself lives on disk under UPLOAD_DIR rather than in the
+  /// database — a row carrying a megabyte of JPEG slows every query that
+  /// touches the catalogue, for a picture most of them never show.
+  imageUrl         String?
+  isActive         Boolean      @default(true)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  devices        Device[]
+  purchaseItems  PurchaseItem[]
+  transferItems  TransferItem[]
+  saleItems      SaleItem[]
+  returnItems    ReturnItem[]
+  lots           Lot[]
+  prices         ProductPrice[]
+  stockLevels    StockLevel[]
+  stockMovements StockMovement[]
+  brand          Brand           @relation(fields: [brandId], references: [id], onDelete: Restrict)
+
+  @@index([brandId])
+  @@index([tracking])
+  @@index([isActive])
+  @@index([name])
+}
+
+model Supplier {
+  id        String   @id @default(uuid())
+  name      String
+  country   String?
+  countryId String?
+  email     String?
+  phone     String?
+  address   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  countryRef Country?   @relation(fields: [countryId], references: [id], onDelete: SetNull)
+  purchases  Purchase[]
+
+  @@index([isActive])
+  @@index([name])
+  @@index([countryId])
+}
+
+model Customer {
+  id        String   @id @default(uuid())
+  name      String
+  country   String?
+  email     String?
+  phone     String?
+  address   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sales   Sale[]
+  returns Return[]
+
+  @@index([isActive])
+  @@index([name])
+}
+
+// ---------------------------------------------------------------------------
+// Physical devices
+// ---------------------------------------------------------------------------
+
+model Device {
+  id                 String       @id @default(uuid())
+  imei               String?      @unique
+  imei2              String?      @unique
+  serialNumber       String?      @unique
+  productId          String
+  status             DeviceStatus @default(IN_STOCK)
+  currentWarehouseId String?
+  purchaseId         String?
+  purchaseItemId     String?
+  transferId         String? // set while the device is loaded on an open transfer
+  saleId             String?
+  saleItemId         String?
+  lotId              String?
+  /// What this unit cost to buy, frozen at goods-in. Never changes.
+  purchaseCost       Decimal?     @db.Decimal(14, 2)
+  /// Purchase cost plus every cost allocated to this unit along the way.
+  /// Materialised from CostEntry and rebuildable from it at any time.
+  landedCost         Decimal?     @db.Decimal(14, 2)
+  costCurrency       Currency?    @default(EUR)
+  receivedAt         DateTime?
+  soldAt             DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  product          Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  currentWarehouse Warehouse?    @relation("DeviceCurrentWarehouse", fields: [currentWarehouseId], references: [id], onDelete: SetNull)
+  purchase         Purchase?     @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+  purchaseItem     PurchaseItem? @relation(fields: [purchaseItemId], references: [id], onDelete: SetNull)
+  transfer         Transfer?     @relation(fields: [transferId], references: [id], onDelete: SetNull)
+  sale             Sale?         @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  saleItem         SaleItem?     @relation(fields: [saleItemId], references: [id], onDelete: SetNull)
+
+  lot           Lot?             @relation(fields: [lotId], references: [id], onDelete: SetNull)
+  movements     DeviceMovement[]
+  transferLines TransferDevice[]
+  returnItems   ReturnItem[]
+  receiptLines  ReceiptLine[]
+  costEntries   CostEntry[]
+
+  @@index([productId])
+  @@index([status])
+  @@index([currentWarehouseId])
+  @@index([purchaseId])
+  @@index([transferId])
+  @@index([saleId])
+  // The stock query that drives every dashboard tile.
+  @@index([currentWarehouseId, status])
+  @@index([currentWarehouseId, productId, status])
+  @@index([lotId])
+}
+
+/// Append-only ledger. Rows are never updated or deleted.
+model DeviceMovement {
+  id              String       @id @default(uuid())
+  deviceId        String
+  type            MovementType
+  fromWarehouseId String?
+  toWarehouseId   String?
+  referenceType   String?
+  referenceId     String?
+  referenceNumber String?
+  performedById   String?
+  metadata        Json?
+  createdAt       DateTime     @default(now())
+
+  device        Device     @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  fromWarehouse Warehouse? @relation("MovementFrom", fields: [fromWarehouseId], references: [id], onDelete: SetNull)
+  toWarehouse   Warehouse? @relation("MovementTo", fields: [toWarehouseId], references: [id], onDelete: SetNull)
+  performedBy   User?      @relation(fields: [performedById], references: [id], onDelete: SetNull)
+
+  @@index([deviceId, createdAt])
+  @@index([createdAt])
+  @@index([referenceType, referenceId])
+}
+
+// ---------------------------------------------------------------------------
+// Purchasing
+// ---------------------------------------------------------------------------
+
+model Purchase {
+  id           String         @id @default(uuid())
+  number       String         @unique
+  supplierId   String
+  warehouseId  String
+  purchaseDate DateTime
+  currency     Currency       @default(EUR)
+  status       PurchaseStatus @default(DRAFT)
+  totalAmount  Decimal        @default(0) @db.Decimal(16, 2)
+  notes        String?
+  createdById  String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  supplier  Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  warehouse Warehouse      @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  createdBy User?          @relation("PurchaseCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  items     PurchaseItem[]
+  devices   Device[]
+  receipts  Receipt[]
+  lots      Lot[]
+
+  @@index([supplierId])
+  @@index([status])
+  @@index([purchaseDate])
+  @@index([warehouseId, status])
+}
+
+model PurchaseItem {
+  id               String  @id @default(uuid())
+  purchaseId       String
+  productId        String
+  quantity         Int
+  receivedQuantity Int     @default(0)
+  unitPrice        Decimal @db.Decimal(14, 2)
+  totalPrice       Decimal @db.Decimal(16, 2)
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  devices  Device[]
+
+  @@unique([purchaseId, productId])
+  @@index([productId])
+}
+
+/// A receiving event: purchase goods-in, or transfer goods-in at destination.
+model Receipt {
+  id            String        @id @default(uuid())
+  number        String        @unique
+  source        ReceiptSource
+  purchaseId    String?
+  transferId    String?
+  warehouseId   String
+  status        ReceiptStatus @default(VALIDATED)
+  expectedCount Int
+  scannedCount  Int
+  createdById   String?
+  validatedById String?
+  validatedAt   DateTime?
+  createdAt     DateTime      @default(now())
+
+  purchase    Purchase?     @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+  transfer    Transfer?     @relation(fields: [transferId], references: [id], onDelete: SetNull)
+  warehouse   Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  createdBy   User?         @relation("ReceiptCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  validatedBy User?         @relation("ReceiptValidatedBy", fields: [validatedById], references: [id], onDelete: SetNull)
+  lines       ReceiptLine[]
+
+  @@index([warehouseId, status])
+  @@index([purchaseId])
+  @@index([transferId])
+  @@index([createdAt])
+}
+
+model ReceiptLine {
+  id        String   @id @default(uuid())
+  receiptId String
+  deviceId  String
+  imei      String?
+  createdAt DateTime @default(now())
+
+  receipt Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  device  Device  @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@unique([receiptId, deviceId])
+  @@index([deviceId])
+}
+
+// ---------------------------------------------------------------------------
+// Transfers and shipments
+// ---------------------------------------------------------------------------
+
+model Transfer {
+  id                     String         @id @default(uuid())
+  number                 String         @unique
+  sourceWarehouseId      String
+  destinationWarehouseId String
+  status                 TransferStatus @default(DRAFT)
+  notes                  String?
+  createdById            String?
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  sourceWarehouse      Warehouse        @relation("TransferSource", fields: [sourceWarehouseId], references: [id], onDelete: Restrict)
+  destinationWarehouse Warehouse        @relation("TransferDestination", fields: [destinationWarehouseId], references: [id], onDelete: Restrict)
+  createdBy            User?            @relation("TransferCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  items                TransferItem[]
+  devices              TransferDevice[]
+  loadedDevices        Device[]
+  shipment             Shipment?
+  receipts             Receipt[]
+
+  @@index([sourceWarehouseId, status])
+  @@index([destinationWarehouseId, status])
+  @@index([status])
+  @@index([createdAt])
+}
+
+/// Planned quantity per product. The authoritative content is TransferDevice.
+model TransferItem {
+  id               String @id @default(uuid())
+  transferId       String
+  productId        String
+  quantity         Int
+  /// BULK lines only: units already despatched and already booked in.
+  ///
+  /// A serialised line needs neither, because the TransferDevice rows are
+  /// themselves the count of what left and what arrived.
+  shippedQuantity  Int    @default(0)
+  receivedQuantity Int    @default(0)
+
+  transfer Transfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([transferId, productId])
+  @@index([productId])
+}
+
+/// The actual physical devices loaded onto a transfer.
+model TransferDevice {
+  id         String    @id @default(uuid())
+  transferId String
+  deviceId   String
+  imei       String
+  receivedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  transfer Transfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  device   Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@unique([transferId, deviceId])
+  @@index([deviceId])
+  @@index([imei])
+}
+
+model Shipment {
+  id           String         @id @default(uuid())
+  number       String         @unique
+  transferId   String         @unique
+  status       ShipmentStatus @default(PREPARING)
+  carrier      String?
+  trackingRef  String?
+  shippedAt    DateTime?
+  receivedAt   DateTime?
+  shippedById  String?
+  receivedById String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  transfer   Transfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  shippedBy  User?    @relation("ShipmentShippedBy", fields: [shippedById], references: [id], onDelete: SetNull)
+  receivedBy User?    @relation("ShipmentReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Sales and returns
+// ---------------------------------------------------------------------------
+
+model Sale {
+  id              String       @id @default(uuid())
+  number          String       @unique
+  customerId      String?
+  warehouseId     String
+  status          SaleStatus   @default(DRAFT)
+  channel         SalesChannel @default(B2B)
+  currency        Currency     @default(EUR)
+  totalAmount     Decimal      @default(0) @db.Decimal(16, 2)
+  /// Revenue converted to the reporting currency at `exchangeRate`, so a later
+  /// rate move never changes the profit already booked on this sale.
+  totalAmountBase Decimal      @default(0) @db.Decimal(16, 2)
+  exchangeRate    Decimal      @default(1) @db.Decimal(18, 8)
+  /// Landed cost of the devices actually shipped, in the reporting currency.
+  /// Recomputed when a late cost document restates the units on this sale.
+  totalCost       Decimal      @default(0) @db.Decimal(16, 2)
+  notes           String?
+  completedAt     DateTime?
+  createdById     String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  customer  Customer?  @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  warehouse Warehouse  @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  createdBy User?      @relation("SaleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  items     SaleItem[]
+  devices   Device[]
+
+  @@index([customerId])
+  @@index([warehouseId, status])
+  @@index([status])
+  @@index([createdAt])
+  @@index([channel, status])
+}
+
+model SaleItem {
+  id          String  @id @default(uuid())
+  saleId      String
+  productId   String
+  quantity    Int
+  unitPrice   Decimal @db.Decimal(14, 2)
+  totalPrice  Decimal @db.Decimal(16, 2)
+  pickedCount Int     @default(0)
+  pickedCost  Decimal @default(0) @db.Decimal(16, 2)
+
+  sale    Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  devices Device[]
+
+  @@unique([saleId, productId])
+  @@index([productId])
+}
+
+model Return {
+  id          String       @id @default(uuid())
+  number      String       @unique
+  customerId  String
+  warehouseId String
+  status      ReturnStatus @default(RETURNED)
+  reason      String?
+  createdById String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  customer  Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  warehouse Warehouse    @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  createdBy User?        @relation("ReturnCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  items     ReturnItem[]
+
+  @@index([customerId])
+  @@index([warehouseId])
+  @@index([createdAt])
+}
+
+model ReturnItem {
+  id        String       @id @default(uuid())
+  returnId  String
+  deviceId  String
+  productId String
+  imei      String
+  outcome   ReturnStatus @default(RESTOCKED)
+
+  return  Return  @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  device  Device  @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([returnId, deviceId])
+  @@index([deviceId])
+}
+
+// ---------------------------------------------------------------------------
+// Landed costing
+// ---------------------------------------------------------------------------
+
+/// One goods-in batch of a single product at one purchase price.
+///
+/// Because every unit carries an IMEI, the lot is NOT a costing method — cost
+/// lives on the device, by specific identification. The lot is the handle you
+/// point a customs or freight bill at, and the grouping reports are built on.
+model Lot {
+  id               String   @id @default(uuid())
+  number           String   @unique
+  productId        String
+  purchaseId       String?
+  purchaseItemId   String?
+  /// Where the lot first landed.
+  warehouseId      String
+  quantity         Int
+  /// Purchase price per unit, frozen. Never edited — a later purchase is a new lot.
+  unitPurchaseCost Decimal  @db.Decimal(14, 2)
+  currency         Currency @default(EUR)
+  receivedAt       DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  product       Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  purchase      Purchase?      @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+  warehouse     Warehouse      @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  devices       Device[]
+  costDocuments CostDocument[]
+
+  @@index([productId])
+  @@index([purchaseId])
+  @@index([warehouseId])
+  @@index([receivedAt])
+}
+
+/// A dated conversion rate. Rows are never updated: a new rate is a new row, so
+/// a cost converted last September keeps the rate it was converted at.
+model ExchangeRate {
+  id           String   @id @default(uuid())
+  fromCurrency Currency
+  toCurrency   Currency
+  /// Amount of `toCurrency` for one unit of `fromCurrency`.
+  rate         Decimal  @db.Decimal(18, 8)
+  validFrom    DateTime
+  createdAt    DateTime @default(now())
+
+  @@unique([fromCurrency, toCurrency, validFrom])
+  @@index([fromCurrency, toCurrency, validFrom])
+}
+
+/// One bill to be spread over the units it applies to: handling at goods-in,
+/// freight for a leg, customs on arrival.
+///
+/// Amounts may be entered in the currency they were billed in. On posting they
+/// are converted once, at the rate in force that day, and the rate is stamped
+/// here — so restating an allocation later re-spreads euros, it never
+/// re-converts at a newer rate.
+model CostDocument {
+  id              String             @id @default(uuid())
+  number          String             @unique
+  type            CostType
+  description     String?
+  /// As billed.
+  amount          Decimal            @db.Decimal(16, 2)
+  currency        Currency
+  /// Rate applied to reach `amountBase`. 1 when already in the base currency.
+  exchangeRate    Decimal            @default(1) @db.Decimal(18, 8)
+  /// The same amount in the reporting currency (EUR). Fixed once posted.
+  amountBase      Decimal            @db.Decimal(16, 2)
+  baseCurrency    Currency           @default(EUR)
+  allocation      AllocationMethod   @default(QUANTITY)
+  scope           CostScope
+  /// Receipt, Shipment or Lot id, depending on `scope`. Null when scope is DEVICES.
+  scopeId         String?
+  /// The explicit units a DEVICES-scoped document covers. A draft has to
+  /// remember its targets, and scopeId cannot hold a list.
+  targetDeviceIds String[]           @default([])
+  status          CostDocumentStatus @default(DRAFT)
+  /// Set when posting restated the cost of units that were already sold.
+  restatedSales   Int                @default(0)
+  incurredAt      DateTime
+  postedAt        DateTime?
+  createdById     String?
+  postedById      String?
+  reversedAt      DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  lot       Lot?        @relation(fields: [lotId], references: [id], onDelete: SetNull)
+  lotId     String?
+  createdBy User?       @relation("CostDocumentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  postedBy  User?       @relation("CostDocumentPostedBy", fields: [postedById], references: [id], onDelete: SetNull)
+  entries   CostEntry[]
+
+  @@index([status])
+  @@index([scope, scopeId])
+  @@index([incurredAt])
+  @@index([lotId])
+  @@index([type])
+}
+
+/// The allocation of one cost document to one device, in the base currency.
+/// Append-only: a mistake is corrected by reversing the document, never by
+/// editing an entry.
+model CostEntry {
+  id             String   @id @default(uuid())
+  costDocumentId String
+  deviceId       String
+  type           CostType
+  /// Share of the document carried by this unit, in the base currency.
+  amount         Decimal  @db.Decimal(14, 4)
+  /// The quantity, value or manual figure this share was derived from.
+  basis          Decimal? @db.Decimal(16, 4)
+  createdAt      DateTime @default(now())
+
+  costDocument CostDocument @relation(fields: [costDocumentId], references: [id], onDelete: Cascade)
+  device       Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@unique([costDocumentId, deviceId])
+  @@index([deviceId])
+  @@index([createdAt])
+}
+
+/// Selling price for a product in a country, valid from a moment in time.
+/// Superseding a price closes the old row rather than overwriting it, so the
+/// price a sale was made at is always recoverable.
+/// On-hand quantity of a BULK product in one warehouse.
+///
+/// The serialised counterpart of this is simply counting Device rows, which is
+/// exact because every row is a real phone. Bulk stock has no rows to count, so
+/// the number is held here and every change goes through StockMovement — the
+/// level is a running total the ledger can always rebuild.
+model StockLevel {
+  id          String   @id @default(uuid())
+  productId   String
+  warehouseId String
+  quantity    Int      @default(0)
+  /// Weighted average landed cost of one unit, in `currency`.
+  ///
+  /// Identical units cannot be told apart, so specific costing is impossible
+  /// here — an average is the only defensible figure. Receiving at a new price
+  /// re-averages; issuing does not move it.
+  avgUnitCost Decimal  @default(0) @db.Decimal(14, 4)
+  currency    Currency @default(EUR)
+  updatedAt   DateTime @updatedAt
+
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Restrict)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+
+  @@unique([productId, warehouseId])
+  @@index([warehouseId])
+}
+
+/// Append-only quantity ledger for BULK products, mirroring DeviceMovement.
+model StockMovement {
+  id              String       @id @default(uuid())
+  productId       String
+  warehouseId     String
+  type            MovementType
+  /// Signed: positive adds to this warehouse, negative removes.
+  quantity        Int
+  /// Unit cost at the moment of the move, for restating and for margin.
+  unitCost        Decimal      @db.Decimal(14, 4)
+  currency        Currency     @default(EUR)
+  referenceType   String?
+  referenceId     String?
+  referenceNumber String?
+  performedById   String?
+  notes           String?
+  createdAt       DateTime     @default(now())
+
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Restrict)
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  performedBy User?     @relation(fields: [performedById], references: [id], onDelete: SetNull)
+
+  @@index([productId, warehouseId])
+  @@index([createdAt])
+  @@index([referenceType, referenceId])
+}
+
+model ProductPrice {
+  id          String    @id @default(uuid())
+  productId   String
+  countryId   String?
+  price       Decimal   @db.Decimal(14, 2)
+  currency    Currency
+  validFrom   DateTime
+  validTo     DateTime?
+  createdById String?
+  createdAt   DateTime  @default(now())
+
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  country   Country? @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  createdBy User?    @relation("ProductPriceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([productId, countryId, validFrom])
+  @@index([validFrom])
+}
+
+// ---------------------------------------------------------------------------
+// Cross-cutting
+// ---------------------------------------------------------------------------
+
+/// An outgoing message, queued before it is sent.
+///
+/// Written after the business transaction commits, so a mail server that is
+/// down or slow can never roll back a receipt. Kept in the database rather than
+/// sent inline so an outage delays the message instead of losing it, and so
+/// there is a record of what was actually sent to whom.
+model Notification {
+  id            String             @id @default(uuid())
+  event         NotificationEvent
+  subject       String
+  /// Rendered at the moment of the event, not at the moment of sending.
+  ///
+  /// Stock keeps moving. An email composed an hour later from live data would
+  /// describe a different warehouse than the one the reader is being told
+  /// about, so the body is frozen when the thing happened.
+  html          String
+  text          String
+  /// Addresses resolved at the same moment, for the same reason.
+  recipients    String[]
+  /// Where the message came from, so the record can be traced back.
+  referenceType String?
+  referenceId   String?
+  warehouseId   String?
+  status        NotificationStatus @default(PENDING)
+  attempts      Int                @default(0)
+  lastError     String?
+  sentAt        DateTime?
+  createdAt     DateTime           @default(now())
+
+  @@index([status, createdAt])
+  @@index([referenceType, referenceId])
+  @@index([event])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  action     String
+  entityType String?
+  entityId   String?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@index([action])
+  @@index([entityType, entityId])
+}
+
+/// Per-scope, per-year sequence backing PO-2026-000001 style document numbers.
+model DocumentCounter {
+  scope String
+  year  Int
+  value Int    @default(0)
+
+  @@id([scope, year])
+}

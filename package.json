@@ -1,0 +1,27 @@
+{
+  "name": "phone-erp",
+  "private": true,
+  "version": "1.0.0",
+  "description": "B2B phone distribution ERP with IMEI-level traceability",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build -w @phone-erp/shared-types && npm run build -w @phone-erp/api && npm run build -w @phone-erp/web",
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:api": "npm run dev -w @phone-erp/api",
+    "dev:web": "npm run dev -w @phone-erp/web",
+    "test": "npm run test -w @phone-erp/api",
+    "lint": "npm run lint --workspaces --if-present",
+    "db:generate": "npm run db:generate -w @phone-erp/api",
+    "db:migrate": "npm run db:migrate -w @phone-erp/api",
+    "db:deploy": "npm run db:deploy -w @phone-erp/api",
+    "db:seed": "npm run db:seed -w @phone-erp/api",
+    "acceptance": "node scripts/acceptance.mjs",
+    "serve": "npm run build && npm run start:prod -w @phone-erp/api"
+  }
+}

@@ -1,0 +1,43 @@
+# Optional convenience for VPS deployments. Nothing in the application depends
+# on Docker; see docs/deployment.md for the shared-hosting route.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-phoneerp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-phoneerp}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-phoneerp}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Not published: only the API needs to reach the database.
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-phoneerp}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-phoneerp}?schema=public
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET (openssl rand -base64 48)}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-12h}
+      FRONTEND_URL: ${FRONTEND_URL:?set FRONTEND_URL}
+      CORS_ORIGIN: ${CORS_ORIGIN:?set CORS_ORIGIN}
+      TRUST_PROXY: 'true'
+      SWAGGER_ENABLED: 'false'
+    ports:
+      - '${API_PORT:-3000}:3000'
+    command: >
+      sh -c "npx prisma migrate deploy --schema apps/api/prisma/schema.prisma &&
+             node apps/api/dist/main.js"
+
+volumes:
+  db-data:
