@@ -84,7 +84,32 @@ say "Installing dependencies"
 # --include=dev explicitly: the application environment sets NODE_ENV=production,
 # and npm reads that to mean "skip devDependencies" — which is every tool the
 # build needs.
-npm ci --include=dev
+#
+# --ignore-scripts because npm ci empties node_modules before it refills it, so
+# an install that dies halfway leaves the running application with a dependency
+# tree that no longer works — and it keeps serving from memory until something
+# restarts it, which is a bad moment to find out. Package install scripts are
+# the part most likely to die: shared hosts cap threads and processes, and
+# Prisma's postinstall is where that cap gets hit. Some hosts refuse to run
+# them at all.
+#
+# What those scripts would have done is done explicitly below instead, where a
+# failure is named rather than silent.
+npm ci --include=dev --ignore-scripts
+
+say "Generating the Prisma client"
+# Normally @prisma/client's postinstall. Without it the client throws
+# "did not initialize yet" at the first query — at runtime, not here.
+npx prisma generate --schema apps/api/prisma/schema.prisma
+
+say "Checking the dependencies load"
+# argon2 is a native module: an install that skipped its build, or one built
+# against another platform, fails at the first login rather than at startup.
+# Better to hear about it now, with the previous build still in place.
+node -e "require('argon2')" ||
+  die "argon2 will not load — every login would fail. Re-run npm ci, or rebuild it with npm rebuild argon2."
+node -e "require('@prisma/client')" ||
+  die "@prisma/client will not load — every query would fail."
 
 for d in "${DISTS[@]}"; do
   rm -rf "$d.prev"
@@ -101,6 +126,10 @@ for d in "${DISTS[@]}"; do rm -rf "$d.prev"; done
 if [ "$KEEP_DEV" -eq 0 ]; then
   say "Removing devDependencies"
   npm prune --omit=dev
+  # The generated client lives inside node_modules and is not a package, so
+  # confirm the prune has not taken it with the rest.
+  node -e "require('@prisma/client')" ||
+    die "the prune removed the generated Prisma client — run: npx prisma generate --schema apps/api/prisma/schema.prisma"
 fi
 
 if [ "$SKIP_WEB" -eq 0 ]; then

@@ -311,6 +311,17 @@ for memory — and restarts through `tmp/restart.txt`, which Passenger watches.
 `--skip-web` leaves the static files alone; `--keep-dev` skips the prune, which
 is slow and only buys disk.
 
+It installs with `--ignore-scripts`, then runs `prisma generate` itself and
+checks that `argon2` and `@prisma/client` actually load before going any
+further. Package install scripts are the part a shared host is most likely to
+kill — thread and process caps are reached inside Prisma's postinstall, and
+some hosts decline to run install scripts at all. That matters more than it
+sounds: `npm ci` empties `node_modules` before refilling it, so an install
+that dies halfway leaves the running application with a dependency tree that
+no longer works, and it keeps serving from memory until something restarts it.
+Doing that work explicitly turns a failure discovered at the next restart into
+one reported here, while the previous build is still in place.
+
 Deploy from a branch CI has passed. The point of keeping the default branch
 green is that the host never pulls a commit the suite has not seen.
 
