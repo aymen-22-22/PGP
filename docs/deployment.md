@@ -9,6 +9,35 @@ folder of static files.
 
 ---
 
+## 0. What the host must provide
+
+Check these before uploading anything. Each one has cost somebody an
+afternoon.
+
+| Requirement | Why |
+|---|---|
+| **Node 20 or newer**, running as a persistent application | A host that only runs PHP or CGI cannot run this at all. cPanel and Plesk call it "Setup Node.js App"; Passenger works too. |
+| **256 MB of memory or more** | The API idles at 80–120 MB and Argon2 takes 19 MB per password hash. A 128 MB plan runs until somebody logs in. |
+| **Outbound TCP to the database port** | Only when the database is not on the host — a managed provider is reached over the public internet. Plenty of shared hosts block outbound connections and say nothing about it. |
+| **`npm install` on the host** | `argon2` is a native module. A `node_modules` built on your laptop will not load if the host's architecture, libc or Node ABI differs, and the error names a `.node` file rather than the cause. |
+| **A writable directory for uploads** | `UPLOAD_DIR` holds product photos. See §3. |
+| **HTTPS**, and a reverse proxy if the API shares the domain | See §4. |
+
+### Check outbound access first
+
+Nothing else matters if the API cannot reach the database. From an SSH
+session on the host:
+
+```bash
+node -e "require('net').createConnection(5432,'YOUR-DB-HOST').on('connect',()=>{console.log('OK');process.exit(0)}).on('error',e=>{console.log('BLOCKED',e.code);process.exit(1)})"
+```
+
+`BLOCKED` is not a configuration problem and no environment variable fixes
+it. Either the host permits egress or the database has to be somewhere the
+host can reach.
+
+---
+
 ## 1. Build
 
 Build locally or in CI, not on the host — shared hosting rarely has the memory.
@@ -116,7 +145,14 @@ CORS_ORIGIN=https://erp.example.com
 COOKIE_SECURE=true
 TRUST_PROXY=true
 SWAGGER_ENABLED=false
+UPLOAD_DIR=/home/you/erp-uploads
 ```
+
+`UPLOAD_DIR` defaults to `./uploads`, inside the directory you upload to.
+Point it somewhere outside that directory on a host where a release replaces
+the application folder, or every deploy takes the product photos with it.
+The database keeps the paths either way, so what you get afterwards is a
+catalogue of broken images rather than an error.
 
 Point the host's Node application at **`dist/main.js`**, with start command:
 
@@ -129,12 +165,31 @@ secret fails immediately and visibly rather than at the first request.
 
 ### cPanel / Plesk ("Setup Node.js App")
 
-- Application root: where you uploaded the files.
-- Application startup file: `dist/main.js`.
-- Node version: 20 or newer.
-- Add the environment variables through the panel, or upload `.env`.
-- The panel supplies `PORT`; do not hard-code one.
-- Use "Run NPM Install" if you did not upload `node_modules`.
+- **Application root**: the directory holding the root `package.json`. Keep it
+  **outside** the document root, or `.env` is downloadable.
+- **Application startup file**: `apps/api/dist/main.js` when the application
+  root is the repository; `dist/main.js` when you uploaded only the API.
+- **Node version**: 20 or newer.
+- **Application URL**: putting it at `yourdomain.com/api` lets the web app keep
+  the domain root, with no proxy rewrite to arrange — the panel routes `/api`
+  to Node and everything else falls through to the static files. Then set
+  `API_PREFIX=v1`, because the default `api/v1` under an `/api` mount answers
+  at `/api/api/v1`. Some Passenger builds pass the full path through instead,
+  in which case `api/v1` is right; `curl` the URL and keep whichever answers.
+- **The panel supplies `PORT`.** Setting it yourself makes the app
+  unreachable.
+- **Environment variables**: prefer the panel's fields. They are set in the
+  process environment, which the configuration reads directly. A `.env` file is
+  read relative to the working directory — the application root, not
+  `apps/api/` — so one placed beside the API source is silently ignored by the
+  running application. Keep `apps/api/.env` anyway for SSH tasks such as
+  `db:seed`, which run with that directory as their working directory, and keep
+  `DATABASE_URL` identical in both.
+- **Do not use "Run NPM Install".** It installs with the application's
+  environment, where `NODE_ENV=production` tells npm to skip `devDependencies`
+  — which is every tool the build needs. Install over SSH instead, after
+  activating the environment with the `source …/nodevenv/…/bin/activate`
+  command the panel shows, and pass `--include=dev` explicitly.
 
 ---
 
@@ -190,6 +245,17 @@ RewriteRule ^api/(.*)$ http://127.0.0.1:3000/api/$1 [P,L]
 API, set `CORS_ORIGIN` to the web app's origin, and set `COOKIE_SAME_SITE=none`
 with `COOKIE_SECURE=true`.
 
+**Do not let the proxy buffer `/api/v1/events`.** The web app holds that
+endpoint open as a Server-Sent Events stream and updates screens as things
+happen. A proxy that buffers responses holds the stream in memory instead of
+passing each event along, and the connection looks alive while delivering
+nothing. On Apache, `SetEnv proxy-sendchunked 1` and no `mod_deflate` for that
+path; on nginx, `proxy_buffering off;`.
+
+Nothing breaks if you cannot arrange it — the app also refetches on a timer, so
+screens go stale rather than wrong — but live updates are the point of the
+stream.
+
 ---
 
 ## 5. Check it
@@ -201,6 +267,51 @@ curl -i https://erp.example.com/api/v1/reports/dashboard # expect 401, never a s
 
 Then sign in through the web app and confirm: the dashboard loads, a scanned
 IMEI resolves, and a warehouse user sees only their own warehouse.
+
+Two checks worth making once, because the failures are quiet:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://erp.example.com/some/deep/route
+curl -s -o /dev/null -w '%{http_code}\n' https://erp.example.com/assets/nope.js
+```
+
+`200` then `404`. A `200` on the second means missing assets are answered with
+the shell, and after the next deploy a browser still running the previous
+version receives HTML where it expects JavaScript.
+
+---
+
+## 6. Updating a deployment
+
+Where the repository is cloned on the host, `scripts/deploy.sh` does the whole
+round — pull, install, build, publish the web app, restart:
+
+```bash
+source ~/nodevenv/<app>/<version>/bin/activate && cd ~/<app-root>
+WEB_ROOT=~/erp.example.com ./scripts/deploy.sh
+```
+
+It refuses to run on a dirty working tree, keeps each `dist` until the build
+succeeds and puts it back if the build dies — which on shared hosting it does,
+for memory — and restarts through `tmp/restart.txt`, which Passenger watches.
+`--skip-web` leaves the static files alone; `--keep-dev` skips the prune, which
+is slow and only buys disk.
+
+Deploy from a branch CI has passed. The point of keeping the default branch
+green is that the host never pulls a commit the suite has not seen.
+
+### When the change includes a migration
+
+The script says so and stops short of applying it, because a migration outlives
+a restart and the database is shared with anything else pointing at it. Apply
+it deliberately — from the **Neon migrate** workflow, or `prisma migrate
+deploy` against the database — and mind the order:
+
+- **Additive** (a new table, a nullable column): apply before or after the
+  restart. The running release ignores what it does not select.
+- **Destructive** (dropping or renaming something the running release still
+  reads): the release that drops must not be the release that stops reading.
+  Ship code tolerating both shapes, deploy it, then drop in a later release.
 
 ---
 

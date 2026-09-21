@@ -17,3 +17,4 @@ apps/api/.env.test
 
 # Local tooling configuration.
 .claude/
+tmp/
