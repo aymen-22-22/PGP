@@ -40,6 +40,44 @@ Apply the schema from a machine that can reach the database:
 DATABASE_URL="postgresql://…" npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
 ```
 
+### Managed PostgreSQL (Neon)
+
+A managed provider replaces the panel-created database above. Nothing in the
+application changes: it reads `DATABASE_URL` and does not know or care who runs
+the server. The Docker database in `docker-compose.yml` stays where it is, for
+development.
+
+Neon issues two connection strings for the same database, differing only in the
+hostname:
+
+| | Host | Use for |
+|---|---|---|
+| **Pooled** | `ep-….<region>.aws.neon.tech` with `-pooler` | The API's `DATABASE_URL`. |
+| **Direct** | the same host without `-pooler` | `pg_dump`, `pg_restore`, logical replication, and anything relying on session state. |
+
+The pooled endpoint routes through PgBouncer in transaction mode, which holds no
+session state between statements. That is right for the API, which opens a
+connection per request, and wrong for tools that expect a session to persist —
+those fail in ways that never mention pooling, such as `prepared statement "s0"
+already exists` or a `SET` that silently does not survive its own transaction.
+
+Keep the `?sslmode=require` the console gives you. Add `&connection_limit=5` if
+the API and the migration job might run at once and the compute is small.
+
+Migrations can be applied from anywhere that can reach the database, including
+the **Neon migrate** workflow in this repository (Actions → Neon migrate),
+which runs `prisma migrate deploy` from a GitHub runner against the
+`NEON_DATABASE_URL` secret and then prints the resulting tables.
+
+Two behaviours worth knowing before the first quiet night:
+
+- **Scale to zero.** An idle compute suspends after about five minutes, and the
+  first query afterwards pays a cold start of a few hundred milliseconds. The
+  API's own timeouts are far longer than that, so it surfaces as one slow
+  request rather than an error.
+- **Storage stays live** while the compute sleeps, so a suspended database is
+  still a database — it is not a cost-free way to decommission one.
+
 Then create the first administrator. Either set `SEED_ADMIN_PASSWORD` and
 `SEED_USER_PASSWORD` and run `npm run db:seed` — which also loads the demo
 warehouses and a sample purchase — or, for a clean production start, seed and
