@@ -185,6 +185,10 @@ secret fails immediately and visibly rather than at the first request.
   running application. Keep `apps/api/.env` anyway for SSH tasks such as
   `db:seed`, which run with that directory as their working directory, and keep
   `DATABASE_URL` identical in both.
+- **The panel's Passenger block lives in the document root's `.htaccess`** when
+  the application URL is under that domain. It is what routes `/api` to Node;
+  publishing the web app over it is the quickest way to take the API down. See
+  §4.
 - **Do not use "Run NPM Install".** It installs with the application's
   environment, where `NODE_ENV=production` tells npm to skip `devDependencies`
   — which is every tool the build needs. Install over SSH instead, after
@@ -200,6 +204,16 @@ Copy the **contents** of `apps/web/dist/` into your public web root.
 Because it is a single-page application, every path must serve `index.html` or a
 refresh on `/transfers/123` returns 404. On Apache, `apps/web/dist/.htaccess`
 below does it; on nginx, `try_files $uri /index.html;`.
+
+**If the web root already has an `.htaccess`, merge into it — never replace
+it.** On a panel-managed host that file is also where the panel keeps its own
+directives: cPanel writes its Passenger block there when the application URL
+sits under this domain, and that block is the only thing routing `/api` to the
+application. Overwriting it takes the API off the air while the site itself
+keeps loading, so it reads as the API having crashed rather than as a change to
+a file nobody touched. Re-saving the application in the panel writes the block
+back; put the rules below underneath it. `scripts/deploy.sh` keeps whatever is
+already there and says when it differs from the build's.
 
 One exception matters: `/assets/` must **not** fall back to the shell. Asset
 filenames contain a content hash, so after a deploy a tab that is still running

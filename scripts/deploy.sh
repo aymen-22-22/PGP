@@ -111,9 +111,33 @@ if [ "$SKIP_WEB" -eq 0 ]; then
   else
     say "Publishing the web app to $WEB_ROOT"
     [ -d "$WEB_ROOT" ] || die "WEB_ROOT $WEB_ROOT does not exist"
-    # dist/. and not dist/* — the glob skips .htaccess, which carries the
-    # single-page rewrite, and the site then 404s on every refresh.
+
+    # A document root's .htaccess is not ours to replace. On a panel-managed
+    # host it also carries the directives that route the API to the application
+    # server — cPanel writes its Passenger block there when the application URL
+    # sits under this domain — and overwriting it takes the API off the air
+    # while the site itself keeps working, which reads as the API having
+    # crashed. Keep whatever is there and put ours in only when there is none.
+    KEPT=""
+    if [ -e "$WEB_ROOT/.htaccess" ]; then
+      KEPT="$(mktemp)"
+      cp "$WEB_ROOT/.htaccess" "$KEPT"
+    fi
+
+    # dist/. and not dist/* — the glob skips dotfiles.
     cp -r apps/web/dist/. "$WEB_ROOT/"
+
+    if [ -n "$KEPT" ]; then
+      cp "$KEPT" "$WEB_ROOT/.htaccess"
+      rm -f "$KEPT"
+      if ! cmp -s apps/web/dist/.htaccess "$WEB_ROOT/.htaccess"; then
+        echo
+        echo "deploy: kept the .htaccess already in $WEB_ROOT; it differs from the"
+        echo "        one in this build. If the build's rules changed, merge them"
+        echo "        in by hand — see docs/deployment.md — rather than replacing"
+        echo "        the file, which may hold your host's own routing."
+      fi
+    fi
   fi
 fi
 
