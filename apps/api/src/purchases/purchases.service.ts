@@ -576,6 +576,109 @@ export class PurchasesService {
     };
   }
 
+  /**
+   * Reserves one label code per unit still lacking one, and returns them all.
+   *
+   * Idempotent on purpose: the button that calls this is pressed by whoever is
+   * standing at the goods-in bench, and pressing it twice must not double the
+   * labels for a line. Only the shortfall is created, so raising a line's
+   * quantity later tops it up rather than starting again.
+   */
+  async generateLabels(user: RequestUser, id: string) {
+    const purchase = await this.prisma.purchase.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        warehouseId: true,
+        status: true,
+        items: { select: { id: true, quantity: true, _count: { select: { labels: true } } } },
+      },
+    });
+    if (!purchase) throw BusinessError.notFound('Purchase', id);
+    this.access.assertAccess(user, purchase.warehouseId);
+    if (purchase.status === PurchaseStatus.CANCELLED) {
+      throw new BusinessError(
+        ErrorCode.VALIDATION_FAILED,
+        'This purchase is cancelled; its units will never arrive.',
+      );
+    }
+
+    const shortfall = purchase.items
+      .map((i) => ({ item: i, missing: i.quantity - i._count.labels }))
+      .filter((s) => s.missing > 0);
+    const total = shortfall.reduce((sum, s) => sum + s.missing, 0);
+
+    if (total > 0) {
+      await this.prisma.$transaction(async (tx) => {
+        const codes = await this.numbers.reserve(tx, 'UL', total);
+        let cursor = 0;
+        for (const { item, missing } of shortfall) {
+          // Numbering continues from what the line already has, so a top-up
+          // does not reuse a sequence that belongs to an existing label.
+          const from = item._count.labels;
+          await tx.purchaseUnitLabel.createMany({
+            data: Array.from({ length: missing }, (_, i) => ({
+              code: codes[cursor + i],
+              purchaseItemId: item.id,
+              sequence: from + i + 1,
+            })),
+          });
+          cursor += missing;
+        }
+      });
+
+      await this.audit.log({
+        userId: user.id,
+        action: AuditAction.CREATE_PURCHASE,
+        entityType: 'Purchase',
+        entityId: id,
+        metadata: { labelsGenerated: total },
+      });
+    }
+
+    return this.labels(user, id);
+  }
+
+  /** Every label on this purchase, in printing order. */
+  async labels(user: RequestUser, id: string) {
+    const purchase = await this.prisma.purchase.findUnique({
+      where: { id },
+      select: { id: true, number: true, warehouseId: true },
+    });
+    if (!purchase) throw BusinessError.notFound('Purchase', id);
+    this.access.assertAccess(user, purchase.warehouseId);
+
+    const labels = await this.prisma.purchaseUnitLabel.findMany({
+      where: { purchaseItem: { purchaseId: id } },
+      select: {
+        id: true,
+        code: true,
+        sequence: true,
+        printedAt: true,
+        purchaseItem: {
+          select: {
+            id: true,
+            quantity: true,
+            product: { select: { id: true, name: true, sku: true, color: true, storage: true } },
+          },
+        },
+      },
+      orderBy: [{ purchaseItemId: 'asc' }, { sequence: 'asc' }],
+    });
+
+    return {
+      purchase: { id: purchase.id, number: purchase.number },
+      data: labels.map((l) => ({
+        id: l.id,
+        code: l.code,
+        sequence: l.sequence,
+        of: l.purchaseItem.quantity,
+        printedAt: l.printedAt,
+        product: l.purchaseItem.product,
+      })),
+    };
+  }
+
   async cancel(user: RequestUser, id: string) {
     const purchase = await this.prisma.purchase.findUnique({
       where: { id },

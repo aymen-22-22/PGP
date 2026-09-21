@@ -21,6 +21,7 @@ const MovementsPage = lazy(() => import('@/pages/movements'));
 const MorePage = lazy(() => import('@/pages/more'));
 const PurchasesPage = lazy(() => import('@/pages/purchases'));
 const PurchaseDetailPage = lazy(() => import('@/pages/purchase-detail'));
+const PurchaseLabelsPage = lazy(() => import('@/pages/purchase-labels'));
 const ReceiptsPage = lazy(() => import('@/pages/receipts'));
 const TransfersPage = lazy(() => import('@/pages/transfers'));
 const TransferDetailPage = lazy(() => import('@/pages/transfer-detail'));
@@ -94,6 +95,7 @@ export function AppRouter() {
 
           <Route path="purchases" element={<PurchasesPage />} />
           <Route path="purchases/:id" element={<PurchaseDetailPage />} />
+          <Route path="purchases/:id/labels" element={<PurchaseLabelsPage />} />
           <Route path="receipts" element={<ReceiptsPage />} />
 
           <Route path="transfers" element={<TransfersPage />} />

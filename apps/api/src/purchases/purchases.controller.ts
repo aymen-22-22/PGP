@@ -55,6 +55,23 @@ export class PurchasesController {
     return this.purchases.receive(user, id, dto);
   }
 
+  @Post(':id/labels')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Reserve a label code for every unit on this purchase',
+    description:
+      'Idempotent: only units without a label get one, so pressing the button twice is harmless.',
+  })
+  generateLabels(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.purchases.generateLabels(user, id);
+  }
+
+  @Get(':id/labels')
+  @ApiOperation({ summary: 'The labels on this purchase, in printing order' })
+  labels(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.purchases.labels(user, id);
+  }
+
   @Post(':id/cancel')
   @AdminOnly()
   @HttpCode(HttpStatus.OK)

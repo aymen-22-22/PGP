@@ -501,12 +501,38 @@ model PurchaseItem {
   unitPrice        Decimal @db.Decimal(14, 2)
   totalPrice       Decimal @db.Decimal(16, 2)
 
-  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  product  Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  purchase Purchase            @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product  Product             @relation(fields: [productId], references: [id], onDelete: Restrict)
   devices  Device[]
+  labels   PurchaseUnitLabel[]
 
   @@unique([purchaseId, productId])
   @@index([productId])
+}
+
+/// One printable label per unit ordered on a purchase line.
+///
+/// A sealed box cannot be identified by IMEI without opening it, so each unit
+/// gets a code when the order is placed and a label when the goods arrive. The
+/// label is not stock and never becomes stock: a Device is still created at
+/// goods-in, from a scan, exactly as before. Until then a label is a reserved
+/// number and nothing more, which is what makes an unused one harmless.
+model PurchaseUnitLabel {
+  id             String    @id @default(uuid())
+  /// UL-2026-000123. Carries a letter prefix on purpose: the scanner reads a
+  /// bare 15-digit run as an IMEI and 12 or 13 as a retail EAN, so a code that
+  /// is only digits would be mistaken for one of them.
+  code           String    @unique
+  purchaseItemId String
+  /// 1..quantity within its line, so a printed sheet can read "3 of 10".
+  sequence       Int
+  printedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  purchaseItem PurchaseItem @relation(fields: [purchaseItemId], references: [id], onDelete: Cascade)
+
+  @@unique([purchaseItemId, sequence])
+  @@index([purchaseItemId])
 }
 
 /// A receiving event: purchase goods-in, or transfer goods-in at destination.
