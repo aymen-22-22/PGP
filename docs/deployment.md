@@ -9,6 +9,35 @@ folder of static files.
 
 ---
 
+## 0. What the host must provide
+
+Check these before uploading anything. Each one has cost somebody an
+afternoon.
+
+| Requirement | Why |
+|---|---|
+| **Node 20 or newer**, running as a persistent application | A host that only runs PHP or CGI cannot run this at all. cPanel and Plesk call it "Setup Node.js App"; Passenger works too. |
+| **256 MB of memory or more** | The API idles at 80–120 MB and Argon2 takes 19 MB per password hash. A 128 MB plan runs until somebody logs in. |
+| **Outbound TCP to the database port** | Only when the database is not on the host — a managed provider is reached over the public internet. Plenty of shared hosts block outbound connections and say nothing about it. |
+| **`npm install` on the host** | `argon2` is a native module. A `node_modules` built on your laptop will not load if the host's architecture, libc or Node ABI differs, and the error names a `.node` file rather than the cause. |
+| **A writable directory for uploads** | `UPLOAD_DIR` holds product photos. See §3. |
+| **HTTPS**, and a reverse proxy if the API shares the domain | See §4. |
+
+### Check outbound access first
+
+Nothing else matters if the API cannot reach the database. From an SSH
+session on the host:
+
+```bash
+node -e "require('net').createConnection(5432,'YOUR-DB-HOST').on('connect',()=>{console.log('OK');process.exit(0)}).on('error',e=>{console.log('BLOCKED',e.code);process.exit(1)})"
+```
+
+`BLOCKED` is not a configuration problem and no environment variable fixes
+it. Either the host permits egress or the database has to be somewhere the
+host can reach.
+
+---
+
 ## 1. Build
 
 Build locally or in CI, not on the host — shared hosting rarely has the memory.
@@ -116,7 +145,14 @@ CORS_ORIGIN=https://erp.example.com
 COOKIE_SECURE=true
 TRUST_PROXY=true
 SWAGGER_ENABLED=false
+UPLOAD_DIR=/home/you/erp-uploads
 ```
+
+`UPLOAD_DIR` defaults to `./uploads`, inside the directory you upload to.
+Point it somewhere outside that directory on a host where a release replaces
+the application folder, or every deploy takes the product photos with it.
+The database keeps the paths either way, so what you get afterwards is a
+catalogue of broken images rather than an error.
 
 Point the host's Node application at **`dist/main.js`**, with start command:
 
@@ -189,6 +225,17 @@ RewriteRule ^api/(.*)$ http://127.0.0.1:3000/api/$1 [P,L]
 **Different origins.** Build the web app with `VITE_API_URL` pointing at the
 API, set `CORS_ORIGIN` to the web app's origin, and set `COOKIE_SAME_SITE=none`
 with `COOKIE_SECURE=true`.
+
+**Do not let the proxy buffer `/api/v1/events`.** The web app holds that
+endpoint open as a Server-Sent Events stream and updates screens as things
+happen. A proxy that buffers responses holds the stream in memory instead of
+passing each event along, and the connection looks alive while delivering
+nothing. On Apache, `SetEnv proxy-sendchunked 1` and no `mod_deflate` for that
+path; on nginx, `proxy_buffering off;`.
+
+Nothing breaks if you cannot arrange it — the app also refetches on a timer, so
+screens go stale rather than wrong — but live updates are the point of the
+stream.
 
 ---
 
