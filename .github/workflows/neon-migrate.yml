@@ -1,0 +1,74 @@
+name: Neon migrate
+
+# Applies the Prisma migrations to a hosted Lakebase Postgres (Neon) database.
+#
+# The runner has the network access that a local sandbox may not, so this is the
+# route for pointing the schema at Neon instead of the Docker database in
+# docker-compose.yml. It only creates the schema: rows living in the local
+# `db-data` volume are not reachable from here, see docs/deployment.md.
+#
+# Required repository secret:
+#   NEON_DATABASE_URL — a *direct* (non-pooled) connection string. Prisma runs
+#   DDL in long transactions and advisory locks, which the pooled `-pooler`
+#   endpoint does not support; take the "Direct connection" string from the Neon
+#   console.
+
+on:
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: 'Also run the development seed (creates demo users with default passwords)'
+        type: boolean
+        default: false
+      confirm:
+        description: 'Type MIGRATE to confirm writing to the Neon database'
+        type: string
+        required: true
+
+concurrency:
+  group: neon-migrate
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+
+    steps:
+      - name: Check confirmation
+        if: inputs.confirm != 'MIGRATE'
+        run: |
+          echo "::error::Type MIGRATE in the confirm input to run this workflow."
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate -w @phone-erp/api
+
+      - name: Show pending migrations
+        run: npx prisma migrate status --schema apps/api/prisma/schema.prisma
+        continue-on-error: true
+
+      - name: Apply migrations
+        run: npm run db:deploy -w @phone-erp/api
+
+      - name: Seed
+        if: inputs.seed
+        run: npm run db:seed -w @phone-erp/api
+
+      # `prisma db execute` runs a statement but never prints rows, so the
+      # resulting table list is read with psql (present on the runner image).
+      - name: List tables
+        run: psql "$DATABASE_URL" -c '\dt'
