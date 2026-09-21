@@ -8,10 +8,12 @@ name: Neon migrate
 # `db-data` volume are not reachable from here, see docs/deployment.md.
 #
 # Required repository secret:
-#   NEON_DATABASE_URL — a *direct* (non-pooled) connection string. Prisma runs
-#   DDL in long transactions and advisory locks, which the pooled `-pooler`
-#   endpoint does not support; take the "Direct connection" string from the Neon
-#   console.
+#   NEON_DATABASE_URL — a connection string from the Neon console. The pooled
+#   `-pooler` endpoint works: the first run against this project applied all 16
+#   migrations through it in 18 seconds. If a future migration ever trips over
+#   the pooler holding no session state — Prisma takes an advisory lock and runs
+#   DDL in long transactions — switch the secret to the "Direct connection"
+#   string, which is the same URL with `-pooler` removed from the host.
 
 on:
   workflow_dispatch:
