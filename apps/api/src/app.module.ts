@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_PIPE } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import compression from 'compression';
+import type { NextFunction, Request, Response } from 'express';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { CommonModule } from './common/common.module';
@@ -36,6 +37,26 @@ import { UsersModule } from './users/users.module';
 import { WarehousesModule } from './warehouses/warehouses.module';
 import { Reflector } from '@nestjs/core';
 import type { AppConfig } from './config/configuration';
+
+/**
+ * Nothing the API answers may be reused from a cache.
+ *
+ * Responses carry an ETag and, until now, no cache directives at all — which
+ * leaves every cache between here and the screen to decide for itself how long
+ * a stock figure stays fresh. A revalidated request can then be answered `304`
+ * by something that is not this process, and the screen keeps a count that has
+ * since changed: the one failure this system is built to prevent. The service
+ * worker is already kept away from `/api` for exactly this reason; this says
+ * the same thing to every other cache.
+ *
+ * Applied as Nest middleware rather than in the bootstrap so it follows the
+ * configured API prefix and never touches the static files, which are served
+ * before Nest sees the request and must stay cacheable.
+ */
+function noStore(_request: Request, response: Response, next: NextFunction): void {
+  response.setHeader('Cache-Control', 'no-store');
+  next();
+}
 
 @Module({
   imports: [
@@ -104,6 +125,6 @@ import type { AppConfig } from './config/configuration';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(compression()).forRoutes('*');
+    consumer.apply(compression(), noStore).forRoutes('*');
   }
 }
