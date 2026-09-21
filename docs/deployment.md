@@ -165,12 +165,31 @@ secret fails immediately and visibly rather than at the first request.
 
 ### cPanel / Plesk ("Setup Node.js App")
 
-- Application root: where you uploaded the files.
-- Application startup file: `dist/main.js`.
-- Node version: 20 or newer.
-- Add the environment variables through the panel, or upload `.env`.
-- The panel supplies `PORT`; do not hard-code one.
-- Use "Run NPM Install" if you did not upload `node_modules`.
+- **Application root**: the directory holding the root `package.json`. Keep it
+  **outside** the document root, or `.env` is downloadable.
+- **Application startup file**: `apps/api/dist/main.js` when the application
+  root is the repository; `dist/main.js` when you uploaded only the API.
+- **Node version**: 20 or newer.
+- **Application URL**: putting it at `yourdomain.com/api` lets the web app keep
+  the domain root, with no proxy rewrite to arrange — the panel routes `/api`
+  to Node and everything else falls through to the static files. Then set
+  `API_PREFIX=v1`, because the default `api/v1` under an `/api` mount answers
+  at `/api/api/v1`. Some Passenger builds pass the full path through instead,
+  in which case `api/v1` is right; `curl` the URL and keep whichever answers.
+- **The panel supplies `PORT`.** Setting it yourself makes the app
+  unreachable.
+- **Environment variables**: prefer the panel's fields. They are set in the
+  process environment, which the configuration reads directly. A `.env` file is
+  read relative to the working directory — the application root, not
+  `apps/api/` — so one placed beside the API source is silently ignored by the
+  running application. Keep `apps/api/.env` anyway for SSH tasks such as
+  `db:seed`, which run with that directory as their working directory, and keep
+  `DATABASE_URL` identical in both.
+- **Do not use "Run NPM Install".** It installs with the application's
+  environment, where `NODE_ENV=production` tells npm to skip `devDependencies`
+  — which is every tool the build needs. Install over SSH instead, after
+  activating the environment with the `source …/nodevenv/…/bin/activate`
+  command the panel shows, and pass `--include=dev` explicitly.
 
 ---
 
@@ -248,6 +267,51 @@ curl -i https://erp.example.com/api/v1/reports/dashboard # expect 401, never a s
 
 Then sign in through the web app and confirm: the dashboard loads, a scanned
 IMEI resolves, and a warehouse user sees only their own warehouse.
+
+Two checks worth making once, because the failures are quiet:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://erp.example.com/some/deep/route
+curl -s -o /dev/null -w '%{http_code}\n' https://erp.example.com/assets/nope.js
+```
+
+`200` then `404`. A `200` on the second means missing assets are answered with
+the shell, and after the next deploy a browser still running the previous
+version receives HTML where it expects JavaScript.
+
+---
+
+## 6. Updating a deployment
+
+Where the repository is cloned on the host, `scripts/deploy.sh` does the whole
+round — pull, install, build, publish the web app, restart:
+
+```bash
+source ~/nodevenv/<app>/<version>/bin/activate && cd ~/<app-root>
+WEB_ROOT=~/erp.example.com ./scripts/deploy.sh
+```
+
+It refuses to run on a dirty working tree, keeps each `dist` until the build
+succeeds and puts it back if the build dies — which on shared hosting it does,
+for memory — and restarts through `tmp/restart.txt`, which Passenger watches.
+`--skip-web` leaves the static files alone; `--keep-dev` skips the prune, which
+is slow and only buys disk.
+
+Deploy from a branch CI has passed. The point of keeping the default branch
+green is that the host never pulls a commit the suite has not seen.
+
+### When the change includes a migration
+
+The script says so and stops short of applying it, because a migration outlives
+a restart and the database is shared with anything else pointing at it. Apply
+it deliberately — from the **Neon migrate** workflow, or `prisma migrate
+deploy` against the database — and mind the order:
+
+- **Additive** (a new table, a nullable column): apply before or after the
+  restart. The running release ignores what it does not select.
+- **Destructive** (dropping or renaming something the running release still
+  reads): the release that drops must not be the release that stops reading.
+  Ship code tolerating both shapes, deploy it, then drop in a later release.
 
 ---
 
