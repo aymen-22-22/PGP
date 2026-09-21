@@ -1,6 +1,6 @@
-import { ArrowLeft, PackageCheck } from 'lucide-react';
+import { ArrowLeft, PackageCheck, Tags } from 'lucide-react';
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -50,7 +50,13 @@ interface PurchaseDetail {
 export default function PurchaseDetailPage() {
   const { t, dateTime, money } = useI18n();
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const toast = useToast();
   const query = useApiQuery<PurchaseDetail>(`/purchases/${id}`);
+
+  // Reserving is idempotent, so the button stays available: a line whose
+  // quantity grew needs topping up, and pressing it again is how that happens.
+  const labels = useApiMutation(() => api.post(`/purchases/${id}/labels`, {}), ['/purchases']);
 
   if (query.isLoading) return <LoadingState label={t('purchase.loading')} />;
   if (query.isError) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
@@ -80,6 +86,23 @@ export default function PurchaseDetailPage() {
             </div>
             <StatusBadge status={purchase.status} />
           </div>
+
+          {purchase.status !== 'CANCELLED' && (
+            <Button
+              variant="outline"
+              className="w-full gap-2 sm:w-auto"
+              disabled={labels.isPending}
+              onClick={() =>
+                labels.mutate(undefined, {
+                  onSuccess: () => navigate(`/purchases/${id}/labels`),
+                  onError: (error) => toast.push('error', error.message),
+                })
+              }
+            >
+              <Tags className="h-4 w-4" />
+              {t('labels.generate')}
+            </Button>
+          )}
 
           <TableWrap className="border-x-0">
             <thead>
