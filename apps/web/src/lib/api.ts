@@ -65,6 +65,12 @@ async function request<T>(method: Method, path: string, body?: unknown): Promise
       method,
       headers,
       credentials: 'include',
+      // Never let the HTTP cache answer for the API. A refetch exists because
+      // something changed, so a reply from the browser's cache — or a `304`
+      // from anything between here and the server — defeats the point of
+      // asking. The server says `no-store` too; this is the half that does not
+      // depend on every cache in the path honouring it.
+      cache: 'no-store',
       body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
     });
   } catch {
