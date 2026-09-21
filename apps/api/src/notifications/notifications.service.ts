@@ -43,6 +43,8 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   private sweep: NodeJS.Timeout | null = null;
   /** The sweep currently running, if any. */
   private inFlight: Promise<{ sent: number; failed: number }> | null = null;
+  /** The sweep notify() last started without waiting for it. */
+  private dispatched: Promise<unknown> = Promise.resolve();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -92,7 +94,9 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       });
 
       // Try immediately; the sweep is the safety net, not the normal path.
-      void this.flush();
+      // The promise is kept rather than dropped so that settled() can wait for
+      // it — the caller still does not.
+      this.dispatched = this.flush().catch(() => undefined);
     } catch (error) {
       this.log.error(`Could not queue ${input.event} for ${input.reference}: ${String(error)}`);
     }
@@ -113,6 +117,19 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       this.inFlight = null;
     });
     return this.inFlight;
+  }
+
+  /**
+   * Waits for the send notify() already started, without starting another.
+   *
+   * notify() returns before its sweep finishes, on purpose: an HTTP response
+   * must not hang on a mail server. That leaves a caller who wants to observe
+   * the result — a test, mostly — with no handle on it, and calling flush()
+   * instead races the sweep already running and can become a second attempt.
+   */
+  async settled(): Promise<void> {
+    await this.dispatched;
+    while (this.inFlight) await this.inFlight;
   }
 
   private async runSweep(): Promise<{ sent: number; failed: number }> {
