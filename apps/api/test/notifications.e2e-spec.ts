@@ -162,7 +162,9 @@ describe('Notifications', () => {
       jest.spyOn(mailer, 'send').mockRejectedValueOnce(new Error('ECONNREFUSED smtp:587'));
 
       await receive([testImei(1)]).expect(200);
-      await notifications.flush();
+      // The attempt is the one notify() already started; flush() here would
+      // race it and could become a second attempt.
+      await notifications.settled();
 
       const [row] = await queued();
       expect(row.status).toBe('PENDING');
@@ -177,7 +179,7 @@ describe('Notifications', () => {
     it('sends it on the next sweep once the server is back', async () => {
       jest.spyOn(mailer, 'send').mockRejectedValueOnce(new Error('ECONNREFUSED smtp:587'));
       await receive([testImei(1)]).expect(200);
-      await notifications.flush();
+      await notifications.settled();
 
       jest.restoreAllMocks();
       const result = await notifications.flush();
