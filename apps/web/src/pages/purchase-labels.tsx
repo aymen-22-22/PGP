@@ -14,6 +14,7 @@ const LABEL_SIZES = [
   { id: '50x30', width: 50, height: 30 },
   { id: '58x40', width: 58, height: 40 },
   { id: '60x40', width: 60, height: 40 },
+  { id: '80x40', width: 80, height: 40 },
 ] as const;
 
 interface UnitLabel {
@@ -161,24 +162,29 @@ export default function PurchaseLabelsPage() {
                 <div
                   key={label.id}
                   style={{ width: mm(size.width), height: mm(size.height) }}
-                  className="label-page flex shrink-0 flex-col items-center justify-center gap-[1mm] overflow-hidden border border-dashed border-border bg-white p-[1.5mm] text-center text-black print:border-0 print:break-after-page print:last:break-after-auto"
+                  // `break-inside-avoid` is the fix for a label splitting
+                  // across two printed pages: without it, a fixed-height box
+                  // that lands a fraction of a pixel over the page boundary
+                  // gets fragmented by the browser's own pagination rather
+                  // than pushed whole onto the next page.
+                  className="label-page flex shrink-0 break-inside-avoid flex-col items-center justify-center gap-[0.8mm] overflow-hidden border border-dashed border-border bg-white p-[1mm] text-center text-black print:border-0 print:break-inside-avoid print:break-after-page print:last:break-after-auto"
                 >
                   <p
                     className="w-full truncate font-semibold leading-none"
-                    style={{ fontSize: mm(size.height * 0.09) }}
+                    style={{ fontSize: mm(size.height * 0.065) }}
                   >
                     {label.product.name}
                   </p>
                   {subtitle && (
-                    <p className="w-full truncate leading-none" style={{ fontSize: mm(size.height * 0.07) }}>
+                    <p className="w-full truncate leading-none" style={{ fontSize: mm(size.height * 0.05) }}>
                       {subtitle}
                     </p>
                   )}
-                  <CodeSymbol value={label.code} size={Math.round(mm(size.height * 0.4))} />
-                  <p className="tabular font-bold leading-none" style={{ fontSize: mm(size.height * 0.12) }}>
+                  <CodeSymbol value={label.code} size={Math.round(mm(size.height * 0.58))} />
+                  <p className="tabular font-bold leading-none" style={{ fontSize: mm(size.height * 0.09) }}>
                     {label.code}
                   </p>
-                  <p className="leading-none" style={{ fontSize: mm(size.height * 0.07) }}>
+                  <p className="leading-none" style={{ fontSize: mm(size.height * 0.05) }}>
                     {label.sequence}/{label.of} · {sheet.purchase.number}
                   </p>
                 </div>
