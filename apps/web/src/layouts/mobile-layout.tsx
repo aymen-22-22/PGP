@@ -75,7 +75,7 @@ export function MobileLayout() {
 
   return (
     <div className="flex min-h-dvh flex-col bg-background">
-      <header className="sticky top-0 z-30 border-b bg-card/95 pt-safe backdrop-blur">
+      <header className="sticky top-0 z-30 border-b bg-card/95 pt-safe backdrop-blur print:hidden">
         <div className="flex items-center justify-between gap-3 px-4 py-2.5">
           <div className="min-w-0">
             <p className="truncate text-base font-bold leading-tight">{user?.warehouseName ?? 'Phone ERP'}</p>
@@ -91,12 +91,12 @@ export function MobileLayout() {
         </div>
       </header>
 
-      <main className="flex-1 px-4 pb-24 pt-4">
+      <main className="flex-1 px-4 pb-24 pt-4 print:p-0">
         <Outlet />
       </main>
 
       <nav
-        className="fixed inset-x-0 bottom-0 z-40 border-t bg-card/95 pb-safe backdrop-blur"
+        className="fixed inset-x-0 bottom-0 z-40 border-t bg-card/95 pb-safe backdrop-blur print:hidden"
         aria-label="Main"
       >
         <ul className="mx-auto flex max-w-lg">

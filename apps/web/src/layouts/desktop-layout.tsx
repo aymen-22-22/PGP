@@ -17,7 +17,7 @@ export function DesktopLayout() {
 
   return (
     <div className="flex min-h-dvh bg-background">
-      <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-e bg-card lg:flex">
+      <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-e bg-card lg:flex print:hidden">
         <div className="border-b px-5 py-4">
           <p className="text-lg font-bold tracking-tight">Phone ERP</p>
           <p className="truncate text-xs text-muted-foreground">
@@ -73,7 +73,7 @@ export function DesktopLayout() {
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 px-4 py-6 lg:px-8">
+      <main className="min-w-0 flex-1 px-4 py-6 lg:px-8 print:p-0">
         <Outlet />
       </main>
     </div>
