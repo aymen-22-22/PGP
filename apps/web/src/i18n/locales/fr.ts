@@ -731,6 +731,7 @@ const fr: Record<string, string> = {
   'scan.add': 'Ajouter',
   'scan.ready': 'Prêt. Les scans sont ajoutés automatiquement — rien à toucher.',
   'scan.duplicate': 'IMEI déjà scanné',
+  'scan.codeDuplicate': 'Déjà scanné',
   'scan.invalid': 'IMEI non valide',
   'scan.wrongPhone': 'Mauvais téléphone',
   'scan.soundOff': 'Son de scan désactivé',
