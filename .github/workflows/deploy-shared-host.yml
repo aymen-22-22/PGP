@@ -13,7 +13,12 @@ name: Deploy to shared host
 # same step into the pipeline so nobody has to remember to run it.
 #
 # Required repository secrets:
-#   NEON_DATABASE_URL — already used by neon-migrate.yml.
+#   NEON_DATABASE_URL — already used by neon-migrate.yml. Must be the
+#                        pooled (-pooler) endpoint: GitHub Actions runners
+#                        could not reach the direct one at all (P1001)
+#                        when this was tried, even though the direct
+#                        endpoint is correctly what the host's own .env
+#                        uses.
 #   DEPLOY_SSH_HOST    — the host to SSH to (your domain or the server name
 #                        cPanel's SSH Access page shows).
 #   DEPLOY_SSH_PORT    — usually 22; cPanel sometimes assigns another port,
@@ -83,8 +88,15 @@ jobs:
       - name: Generate Prisma client
         run: npm run db:generate -w @phone-erp/api
 
+      # Neon's pooled endpoint is the only one reachable from a GitHub Actions
+      # runner (the direct one answers connection refused here, even though
+      # it's what the host itself uses) — see docs/deployment.md and
+      # neon-migrate.yml's own header. Pooled connections don't hold session
+      # state, so migrate's advisory lock can occasionally time out waiting
+      # on Neon's compute to wake from scale-to-zero; one retry covers that
+      # without masking a real failure on the second attempt.
       - name: Apply pending migrations
-        run: npm run db:deploy -w @phone-erp/api
+        run: npm run db:deploy -w @phone-erp/api || (echo "Retrying once after a pause — likely Neon waking from scale-to-zero" && sleep 15 && npm run db:deploy -w @phone-erp/api)
 
       - name: Build
         run: npm run build
