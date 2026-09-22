@@ -1,0 +1,75 @@
+name: Build artifacts
+
+# Builds everything a deploy needs — the Prisma client, the API, and the web
+# app — on a GitHub runner instead of the host.
+#
+# Some shared hosts cap the number of threads a user may create (a CloudLinux
+# LVE nproc limit). `prisma generate` forks a generator process that needs its
+# own thread pool, and `tsc`/`vite build` fork workers of their own; under a
+# tight enough cap any of them dies with `pthread_create: Resource temporarily
+# unavailable` — sometimes silently, since Prisma's generator can be killed
+# without the parent CLI reporting a non-zero exit. No flag combination fixes
+# a cap that is simply too low. This workflow does the same work somewhere
+# without that limit and hands back what the host only needs to unpack.
+#
+# The runner is Linux x64 like the host, so the Prisma query engine binary
+# built here (debian-openssl-3.0.x) runs there unmodified.
+#
+# Usage: Actions → Build artifacts → Run workflow, then from the download:
+#   unzip build-artifacts.zip -d /tmp/build-artifacts
+#   rsync -a /tmp/build-artifacts/prisma-client/ node_modules/.prisma/
+#   rsync -a /tmp/build-artifacts/api-dist/ apps/api/dist/
+#   rsync -a /tmp/build-artifacts/web-dist/ apps/web/dist/
+#   rsync -a /tmp/build-artifacts/shared-types-dist/ packages/shared-types/dist/
+# (or `cp -r … /…/.` if rsync isn't on the host — see docs/deployment.md)
+# then restart as usual (touch tmp/restart.txt).
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch, tag, or commit to build'
+        type: string
+        default: 'main'
+
+concurrency:
+  group: build-artifacts
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate -w @phone-erp/api
+
+      - name: Build
+        run: npm run build
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p /tmp/out
+          cp -r node_modules/.prisma /tmp/out/prisma-client
+          cp -r apps/api/dist /tmp/out/api-dist
+          cp -r apps/web/dist /tmp/out/web-dist
+          cp -r packages/shared-types/dist /tmp/out/shared-types-dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: /tmp/out
+          retention-days: 7

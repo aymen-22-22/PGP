@@ -55,6 +55,33 @@ Produces:
 | `apps/web/dist/` | Static files. Serve from any web root. |
 | `packages/shared-types/dist/` | Consumed by the API at runtime. |
 
+### When even `prisma generate` won't run on the host
+
+Some shared hosts cap the number of threads a user may create (a CloudLinux
+LVE `nproc` limit). `prisma generate` forks a generator process that needs
+its own thread pool, and `tsc`/`vite build` fork workers of their own; under
+a tight enough cap any of them dies with `pthread_create: Resource
+temporarily unavailable` — and Prisma's generator can be killed without the
+CLI reporting a non-zero exit, so `prisma generate` can appear to succeed
+while writing nothing. No combination of `UV_THREADPOOL_SIZE` or
+`--v8-pool-size` fixes a cap that is simply too low; smaller values just move
+the failure from one fork to another (the build workers this time).
+
+Run `.github/workflows/build-artifacts.yml` instead (Actions → Build
+artifacts → Run workflow). It installs, generates the Prisma client, and
+builds all three packages on the runner — Linux x64 like the host, so the
+query engine binary it produces (`debian-openssl-3.0.x`) runs there
+unmodified — and uploads a `build-artifacts` zip. Unpack it into place:
+
+```bash
+unzip build-artifacts.zip -d /tmp/build-artifacts
+cp -r /tmp/build-artifacts/prisma-client/. node_modules/.prisma/
+cp -r /tmp/build-artifacts/api-dist/. apps/api/dist/
+cp -r /tmp/build-artifacts/web-dist/. apps/web/dist/
+cp -r /tmp/build-artifacts/shared-types-dist/. packages/shared-types/dist/
+touch tmp/restart.txt
+```
+
 ---
 
 ## 2. Database
