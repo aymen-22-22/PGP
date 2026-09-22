@@ -41,10 +41,15 @@ describe('IMEI traceability and the movement ledger (spec §20, §21)', () => {
     await as(app, jean).post(`/api/v1/transfers/${transfer.body.id}/receive`).send({ imeis: moved }).expect(200);
 
     // France sells one — selling is an office function, not the warehouse
-    // account that just received the transfer.
+    // account that just received the transfer. An administrator has no
+    // warehouse of their own, so the selling one has to be named.
     const sale = await as(app, admin)
       .post('/api/v1/sales')
-      .send({ customerId: fixture.customer.id, items: [{ productId: fixture.product.id, quantity: 1 }] })
+      .send({
+        customerId: fixture.customer.id,
+        warehouseId: fixture.france.id,
+        items: [{ productId: fixture.product.id, quantity: 1 }],
+      })
       .expect(201);
     await as(app, admin).post(`/api/v1/sales/${sale.body.id}/complete`).send({ imeis: [moved[0]] }).expect(200);
 
