@@ -109,7 +109,10 @@ export function loadConfiguration(): AppConfig {
     },
     throttle: {
       ttlMs: Number(process.env.THROTTLE_TTL_MS ?? 60_000),
-      limit: Number(process.env.THROTTLE_LIMIT ?? 300),
+      // Per account, not per address (see UserThrottlerGuard). One picker
+      // working a pallet spends a request per scan plus the refetches each
+      // one triggers, so 300/min was reachable by one person doing their job.
+      limit: Number(process.env.THROTTLE_LIMIT ?? 1200),
       // Low on purpose: login is the one endpoint worth brute-forcing.
       loginLimit: Number(process.env.THROTTLE_LOGIN_LIMIT ?? 10),
     },
