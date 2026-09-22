@@ -1,7 +1,7 @@
 import { MiddlewareConsumer, Module, NestModule, ValidationPipe } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_PIPE } from '@nestjs/core';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import compression from 'compression';
 import type { NextFunction, Request, Response } from 'express';
 import { AuditModule } from './audit/audit.module';
@@ -10,6 +10,7 @@ import { CommonModule } from './common/common.module';
 import { CostingModule } from './costing/costing.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { CsrfGuard } from './common/guards/csrf.guard';
+import { UserThrottlerGuard } from './common/guards/user-throttler.guard';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { APP_CONFIG } from './common/tokens';
@@ -106,7 +107,7 @@ function noStore(_request: Request, response: Response, next: NextFunction): voi
       inject: [APP_CONFIG, Reflector],
     },
     { provide: APP_GUARD, useFactory: (r: Reflector) => new RolesGuard(r), inject: [Reflector] },
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: UserThrottlerGuard },
     {
       provide: APP_PIPE,
       useFactory: () =>

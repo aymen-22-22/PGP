@@ -22,7 +22,10 @@ const queryClient = new QueryClient({
       // events refresh the moment something changes, this catches anything
       // that slips through while the screen is open and nobody is watching it.
       refetchInterval: 30_000,
-      refetchIntervalInBackground: true,
+      // Only while the screen is actually being looked at. Polling hidden tabs
+      // too meant every forgotten tab kept spending requests for as long as it
+      // stayed open, which is what pushed a busy shop into rate limiting.
+      refetchIntervalInBackground: false,
       retry: (failureCount, error) => {
         // Never retry a refusal — it will be refused again.
         if (error instanceof ApiRequestError && error.status >= 400 && error.status < 500) return false;
