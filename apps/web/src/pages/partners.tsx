@@ -90,7 +90,13 @@ export default function PartnersPage({ kind }: { kind: 'customers' | 'suppliers'
   );
 }
 
-function NewPartyForm({ kind, onDone }: { kind: 'customers' | 'suppliers'; onDone: () => void }) {
+export function NewPartyForm({
+  kind,
+  onDone,
+}: {
+  kind: 'customers' | 'suppliers';
+  onDone: (created?: Party) => void;
+}) {
   const { t } = useI18n();
   const toast = useToast();
   const [form, setForm] = useState({ name: '', country: '', email: '', phone: '', address: '' });
@@ -114,9 +120,9 @@ function NewPartyForm({ kind, onDone }: { kind: 'customers' | 'suppliers'; onDon
             create.mutate(
               Object.fromEntries(Object.entries(form).filter(([, value]) => value !== '')),
               {
-                onSuccess: () => {
+                onSuccess: (created) => {
                   toast.push('success', t('partners.saved'));
-                  onDone();
+                  onDone(created);
                 },
                 onError: (error) => toast.push('error', error.message),
               },
@@ -151,7 +157,7 @@ function NewPartyForm({ kind, onDone }: { kind: 'customers' | 'suppliers'; onDon
             <Button type="submit" disabled={!form.name || create.isPending}>
               {create.isPending ? t('common.saving') : t('common.save')}
             </Button>
-            <Button type="button" variant="ghost" onClick={onDone}>
+            <Button type="button" variant="ghost" onClick={() => onDone()}>
               {t('common.cancel')}
             </Button>
           </div>

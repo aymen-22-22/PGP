@@ -35,6 +35,8 @@ interface TransferDetail {
     receivedAt: string | null;
     shippedBy: { name: string } | null;
     receivedBy: { name: string } | null;
+    deliveryCompany: { id: string; name: string } | null;
+    driver: { id: string; name: string } | null;
   } | null;
   items: { id: string; quantity: number; product: { id: string; name: string; sku: string } }[];
   devices: { id: string; imei: string; receivedAt: string | null; device: { status: string } }[];
@@ -97,6 +99,18 @@ export default function TransferDetailPage() {
                   {transfer.shipment.shippedBy && ` · ${transfer.shipment.shippedBy.name}`}
                 </dd>
               </div>
+              {(transfer.shipment.deliveryCompany || transfer.shipment.driver || transfer.shipment.carrier) && (
+                <div className="col-span-2">
+                  <dt className="text-xs uppercase tracking-wide text-muted-foreground">
+                    {t('delivery.carrier')}
+                  </dt>
+                  <dd className="font-medium">
+                    {[transfer.shipment.deliveryCompany?.name, transfer.shipment.driver?.name]
+                      .filter(Boolean)
+                      .join(' · ') || transfer.shipment.carrier}
+                  </dd>
+                </div>
+              )}
               {transfer.shipment.receivedAt && (
                 <div className="col-span-2">
                   <dt className="text-xs uppercase tracking-wide text-muted-foreground">{t('common.received')}</dt>

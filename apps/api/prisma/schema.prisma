@@ -675,7 +675,58 @@ model Shipment {
   shippedBy  User?    @relation("ShipmentShippedBy", fields: [shippedById], references: [id], onDelete: SetNull)
   receivedBy User?    @relation("ShipmentReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
 
+  /// Who actually carried it. `carrier` above stays as free text for a
+  /// one-off courier nobody wants a record for; these are the ones used
+  /// often enough to be worth managing.
+  deliveryCompany   DeliveryCompany? @relation(fields: [deliveryCompanyId], references: [id], onDelete: SetNull)
+  deliveryCompanyId String?
+  driver            Driver?          @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  driverId          String?
+
   @@index([status])
+  @@index([deliveryCompanyId])
+  @@index([driverId])
+}
+
+/// A transport firm goods are handed to. Retired rather than deleted once it
+/// has carried anything, so old shipments keep saying who moved them.
+model DeliveryCompany {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  contact   String?
+  phone     String?
+  email     String?
+  address   String?
+  notes     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  drivers   Driver[]
+  shipments Shipment[]
+
+  @@index([isActive])
+}
+
+/// The person at the wheel. Optionally attached to a company; an owner-driver
+/// has none, which is why the link is nullable.
+model Driver {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String?
+  vehicle   String?
+  notes     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company   DeliveryCompany? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  companyId String?
+  shipments Shipment[]
+
+  @@unique([name, companyId])
+  @@index([isActive])
+  @@index([companyId])
 }
 
 // ---------------------------------------------------------------------------

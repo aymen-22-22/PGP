@@ -55,6 +55,15 @@ export class CreateTransferDto {
   autoFill?: boolean;
 
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) notes?: string;
+
+  @ApiPropertyOptional({ description: 'Who is carrying it — a managed transport firm' })
+  @IsOptional()
+  @IsUUID()
+  deliveryCompanyId?: string;
+  @ApiPropertyOptional({ description: 'Who is at the wheel' })
+  @IsOptional()
+  @IsUUID()
+  driverId?: string;
 }
 
 export class LoadDevicesDto {
@@ -67,8 +76,17 @@ export class LoadDevicesDto {
 }
 
 export class ShipTransferDto {
+  /** Free text, for a one-off courier nobody wants a record for. */
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(120) carrier?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(120) trackingRef?: string;
+  @ApiPropertyOptional({ description: 'A managed transport firm' })
+  @IsOptional()
+  @IsUUID()
+  deliveryCompanyId?: string;
+  @ApiPropertyOptional({ description: 'Who is at the wheel' })
+  @IsOptional()
+  @IsUUID()
+  driverId?: string;
 }
 
 export class ReceiveTransferDto {

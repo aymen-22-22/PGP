@@ -147,6 +147,8 @@ export class TransfersService {
           include: {
             shippedBy: { select: { id: true, name: true } },
             receivedBy: { select: { id: true, name: true } },
+            deliveryCompany: { select: { id: true, name: true } },
+            driver: { select: { id: true, name: true } },
           },
         },
         items: { include: { product: { select: { id: true, name: true, sku: true, tracking: true } } } },
@@ -224,7 +226,14 @@ export class TransfersService {
           items: { create: dto.items.map((i) => ({ productId: i.productId, quantity: i.quantity })) },
           // The shipment is the physical counterpart of the transfer and is
           // created with it, so there is never a transfer without one.
-          shipment: { create: { number: shipmentNumber, status: ShipmentStatus.PREPARING } },
+          shipment: {
+            create: {
+              number: shipmentNumber,
+              status: ShipmentStatus.PREPARING,
+              deliveryCompanyId: dto.deliveryCompanyId,
+              driverId: dto.driverId,
+            },
+          },
         },
       });
     });
@@ -587,6 +596,10 @@ export class TransfersService {
             shippedAt: now,
             shippedById: user.id,
             carrier: dto.carrier,
+            // Only overwrite when this dispatch actually named one; the
+            // transfer may already carry what was chosen when it was created.
+            ...(dto.deliveryCompanyId ? { deliveryCompanyId: dto.deliveryCompanyId } : {}),
+            ...(dto.driverId ? { driverId: dto.driverId } : {}),
             trackingRef: dto.trackingRef,
           },
         });
