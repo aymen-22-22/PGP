@@ -22,7 +22,8 @@ import { AppConfig } from '../config/configuration';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { StockService } from '../stock/stock.service';
-import { CreatePurchaseDto, QueryPurchasesDto, ReceiveByLabelDto, ReceivePurchaseDto } from './dto/purchase.dto';
+import { CreatePurchaseDto, PrintLabelsDto, QueryPurchasesDto, ReceiveByLabelDto, ReceivePurchaseDto } from './dto/purchase.dto';
+import { buildLabelTicket, parseHostPort, printToNetworkPrinter } from './escpos.util';
 
 @Injectable()
 export class PurchasesService {
@@ -844,6 +845,79 @@ export class PurchasesService {
         product: l.purchaseItem.product,
       })),
     };
+  }
+
+  /**
+   * Sends every label straight to the caller's configured network thermal
+   * printer instead of the browser's print dialog — for the "network"
+   * printer-connection option (§ user printer settings). Only reachable when
+   * the API host and the printer share a network; refused otherwise with the
+   * connection error, not silently skipped.
+   */
+  async printLabels(user: RequestUser, id: string, dto: PrintLabelsDto) {
+    const purchase = await this.prisma.purchase.findUnique({
+      where: { id },
+      select: { id: true, number: true, warehouseId: true },
+    });
+    if (!purchase) throw BusinessError.notFound('Purchase', id);
+    this.access.assertAccess(user, purchase.warehouseId);
+
+    const printer = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      select: { printerConnectionType: true, printerAddress: true },
+    });
+    if (printer?.printerConnectionType !== 'NETWORK' || !printer.printerAddress) {
+      throw new BusinessError(
+        ErrorCode.VALIDATION_FAILED,
+        'No network printer is configured. Set one under More → Printer.',
+      );
+    }
+    const { host, port } = parseHostPort(printer.printerAddress);
+
+    const labels = await this.prisma.purchaseUnitLabel.findMany({
+      where: {
+        purchaseItem: { purchaseId: id },
+        ...(dto.labelIds?.length ? { id: { in: dto.labelIds } } : {}),
+      },
+      select: {
+        id: true,
+        code: true,
+        sequence: true,
+        purchaseItem: {
+          select: { quantity: true, product: { select: { name: true, storage: true, color: true } } },
+        },
+      },
+      orderBy: [{ purchaseItemId: 'asc' }, { sequence: 'asc' }],
+    });
+    if (labels.length === 0) throw BusinessError.notFound('Label', id);
+
+    const ticket = Buffer.concat(
+      labels.map((l) =>
+        buildLabelTicket({
+          code: l.code,
+          product: l.purchaseItem.product,
+          sequence: l.sequence,
+          of: l.purchaseItem.quantity,
+          purchaseNumber: purchase.number,
+        }),
+      ),
+    );
+
+    try {
+      await printToNetworkPrinter(host, port, ticket);
+    } catch (error) {
+      throw new BusinessError(
+        ErrorCode.VALIDATION_FAILED,
+        `Could not reach the printer at ${printer.printerAddress}: ${(error as Error).message}`,
+      );
+    }
+
+    await this.prisma.purchaseUnitLabel.updateMany({
+      where: { id: { in: labels.map((l) => l.id) } },
+      data: { printedAt: new Date() },
+    });
+
+    return { printed: labels.length };
   }
 
   async cancel(user: RequestUser, id: string) {

@@ -1,4 +1,4 @@
-import type { Currency, Role } from './enums';
+import type { Currency, PrinterConnectionType, Role } from './enums';
 
 export interface AuthUser {
   id: string;
@@ -15,4 +15,10 @@ export interface AuthUser {
   countryCurrency: Currency | null;
   /** Whether this person wants the operational emails. */
   notifyByEmail: boolean;
+  /** How this person's browser prints unit labels. */
+  printerConnectionType: PrinterConnectionType;
+  /** host:port for NETWORK, the agent's URL for AGENT, null for BROWSER. */
+  printerAddress: string | null;
+  /** The label size to default to, e.g. "58x40". */
+  printerLabelSize: string;
 }

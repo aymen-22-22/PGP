@@ -5,17 +5,12 @@ import { Link, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Label, Select } from '@/components/ui/input';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
-import { useApiQuery } from '@/hooks/use-api';
+import { useToast } from '@/components/ui/toast';
+import { useApiMutation, useApiQuery } from '@/hooks/use-api';
 import { useI18n } from '@/i18n/provider';
-
-/** Common thermal roll sizes, in millimetres — width × height of one label. */
-const LABEL_SIZES = [
-  { id: '40x30', width: 40, height: 30 },
-  { id: '50x30', width: 50, height: 30 },
-  { id: '58x40', width: 58, height: 40 },
-  { id: '60x40', width: 60, height: 40 },
-  { id: '80x40', width: 80, height: 40 },
-] as const;
+import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
+import { isLabelSizeId, LABEL_SIZES } from '@/lib/label-sizes';
 
 interface UnitLabel {
   id: string;
@@ -91,15 +86,69 @@ const mm = (value: number) => value * MM_TO_PX;
  */
 export default function PurchaseLabelsPage() {
   const { t } = useI18n();
+  const toast = useToast();
   const { id } = useParams<{ id: string }>();
+  const user = useAuth((s) => s.user);
   const query = useApiQuery<LabelSheet>(`/purchases/${id}/labels`);
-  const [sizeId, setSizeId] = useState<(typeof LABEL_SIZES)[number]['id']>('58x40');
+  const [sizeId, setSizeId] = useState<(typeof LABEL_SIZES)[number]['id']>(
+    user?.printerLabelSize && isLabelSizeId(user.printerLabelSize) ? user.printerLabelSize : '58x40',
+  );
   const size = LABEL_SIZES.find((s) => s.id === sizeId)!;
+  const connection = user?.printerConnectionType ?? 'BROWSER';
+
+  const printViaNetwork = useApiMutation(() => api.post(`/purchases/${id}/labels/print`, {}), ['/purchases']);
+  const [printingViaAgent, setPrintingViaAgent] = useState(false);
 
   if (query.isLoading) return <LoadingState label={t('labels.loading')} />;
   if (query.isError) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
 
   const sheet = query.data!;
+
+  const printViaAgent = async () => {
+    if (!user?.printerAddress) return;
+    setPrintingViaAgent(true);
+    try {
+      let failed = 0;
+      for (const label of sheet.data) {
+        try {
+          const res = await fetch(user.printerAddress, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              code: label.code,
+              product: label.product.name,
+              sequence: label.sequence,
+              of: label.of,
+              purchaseNumber: sheet.purchase.number,
+              size: sizeId,
+            }),
+          });
+          if (!res.ok) failed += 1;
+        } catch {
+          failed += 1;
+        }
+      }
+      if (failed > 0) toast.push('error', t('labels.agentPartial', { failed: String(failed) }));
+      else toast.push('success', t('labels.printed'));
+    } finally {
+      setPrintingViaAgent(false);
+    }
+  };
+
+  const print = () => {
+    if (connection === 'NETWORK') {
+      printViaNetwork.mutate(undefined, {
+        onSuccess: () => toast.push('success', t('labels.printed')),
+        onError: (error) => toast.push('error', error.message),
+      });
+    } else if (connection === 'AGENT') {
+      void printViaAgent();
+    } else {
+      window.print();
+    }
+  };
+
+  const printing = printViaNetwork.isPending || printingViaAgent;
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
@@ -129,9 +178,9 @@ export default function PurchaseLabelsPage() {
                 ))}
               </Select>
             </div>
-            <Button className="gap-2" onClick={() => window.print()}>
+            <Button className="gap-2" onClick={print} disabled={printing}>
               <Printer className="h-4 w-4" />
-              {t('labels.print')}
+              {printing ? t('common.saving') : t('labels.print')}
             </Button>
           </div>
         )}

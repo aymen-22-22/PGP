@@ -163,6 +163,19 @@ enum SalesChannel {
   POS
 }
 
+/// How a person's browser gets a unit label to their thermal printer.
+enum PrinterConnectionType {
+  /// The OS print dialog — works with any printer already set up on the
+  /// computer, no address needed.
+  BROWSER
+  /// A network printer this API can reach directly, host:port (e.g. the
+  /// AppSocket/JetDirect port most thermal printers answer on, 9100).
+  NETWORK
+  /// A local print-agent's URL (QZ Tray, PrintNode, or similar) that the
+  /// browser itself calls — never reachable from the API host.
+  AGENT
+}
+
 // ---------------------------------------------------------------------------
 // Organisation
 // ---------------------------------------------------------------------------
@@ -235,21 +248,28 @@ model CostCenter {
 }
 
 model User {
-  id            String    @id @default(uuid())
-  name          String
-  email         String    @unique
-  passwordHash  String
-  role          Role      @default(WAREHOUSE_USER)
-  warehouseId   String?
-  costCenterId  String?
-  isActive      Boolean   @default(true)
+  id                    String                @id @default(uuid())
+  name                  String
+  email                 String                @unique
+  passwordHash          String
+  role                  Role                  @default(WAREHOUSE_USER)
+  warehouseId           String?
+  costCenterId          String?
+  isActive              Boolean               @default(true)
   // Bumped on password change / deactivation so already-issued JWTs stop working.
-  tokenVersion  Int       @default(0)
+  tokenVersion          Int                   @default(0)
   /// Whether this person wants the operational emails at all.
-  notifyByEmail Boolean   @default(true)
-  lastLoginAt   DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  notifyByEmail         Boolean               @default(true)
+  /// How this person's browser prints unit labels — their own setting, not
+  /// shared with anyone else signed into the same warehouse account.
+  printerConnectionType PrinterConnectionType @default(BROWSER)
+  /// host:port for NETWORK, or the agent's URL for AGENT. Null for BROWSER.
+  printerAddress        String?
+  /// The last label size they printed, e.g. "58x40" — reused as the default.
+  printerLabelSize      String                @default("58x40")
+  lastLoginAt           DateTime?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
 
   warehouse  Warehouse?  @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
   costCenter CostCenter? @relation(fields: [costCenterId], references: [id], onDelete: SetNull)

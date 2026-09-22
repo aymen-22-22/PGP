@@ -162,6 +162,27 @@ describe('Authentication (spec §23)', () => {
     expect(actions).toContain('LOGIN');
     expect(JSON.stringify(logs)).not.toContain('nope-not-this-one');
   });
+
+  it('defaults everyone to browser printing, and lets a person set their own printer', async () => {
+    const jean = await login(app, fixture.jean.email);
+    const me = await as(app, jean).get('/api/v1/auth/me').expect(200);
+    expect(me.body).toMatchObject({ printerConnectionType: 'BROWSER', printerAddress: null, printerLabelSize: '58x40' });
+
+    const updated = await as(app, jean)
+      .patch('/api/v1/auth/preferences')
+      .send({ printerConnectionType: 'AGENT', printerAddress: 'http://localhost:8181/print', printerLabelSize: '80x40' })
+      .expect(200);
+    expect(updated.body).toMatchObject({
+      printerConnectionType: 'AGENT',
+      printerAddress: 'http://localhost:8181/print',
+      printerLabelSize: '80x40',
+    });
+
+    // Someone else's printer stays untouched.
+    const carlos = await login(app, fixture.carlos.email);
+    const other = await as(app, carlos).get('/api/v1/auth/me').expect(200);
+    expect(other.body.printerConnectionType).toBe('BROWSER');
+  });
 });
 
 describe('Login rate limiting (spec §23, §41)', () => {
