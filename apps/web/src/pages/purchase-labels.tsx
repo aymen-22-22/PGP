@@ -151,7 +151,7 @@ export default function PurchaseLabelsPage() {
   const printing = printViaNetwork.isPending || printingViaAgent;
 
   return (
-    <div className="mx-auto max-w-4xl space-y-5">
+    <div className="mx-auto max-w-4xl space-y-5 print:m-0 print:max-w-none print:space-y-0">
       <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
         <Button asChild variant="ghost" size="sm" className="-ms-2 gap-1">
           <Link to={`/purchases/${id}`}>
