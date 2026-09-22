@@ -212,7 +212,7 @@ export default function PurchaseLabelsPage() {
               // allowed to wrap onto a second line rather than truncate: a
               // human reading it as a QR-scan fallback needs every character.
               const colWidthMm = size.width - qrMm - 4;
-              const codeMm = Math.max(1.6, Math.min(size.height * 0.12, colWidthMm / (label.code.length * 0.62)));
+              const codeMm = Math.max(1.4, Math.min(size.height * 0.1, colWidthMm / (label.code.length * 0.62)));
               return (
                 <div
                   key={label.id}
@@ -225,19 +225,24 @@ export default function PurchaseLabelsPage() {
                   className="label-page flex shrink-0 break-inside-avoid items-center gap-[2mm] overflow-hidden border border-dashed border-border bg-white p-[1mm] text-black print:border-0 print:break-inside-avoid print:break-after-page print:last:break-after-auto"
                 >
                   <CodeSymbol value={label.code} size={Math.round(mm(qrMm))} />
-                  <div className="flex min-w-0 flex-1 flex-col justify-center gap-[0.5mm]">
-                    <p className="w-full truncate font-semibold leading-none" style={{ fontSize: mm(size.height * 0.1) }}>
+                  <div className="flex min-w-0 flex-1 flex-col justify-center gap-[0.4mm]">
+                    {/* Wraps onto two lines instead of truncating — the full
+                        product name matters more here than one extra line. */}
+                    <p
+                      className="line-clamp-3 w-full font-semibold leading-tight"
+                      style={{ fontSize: mm(size.height * 0.065) }}
+                    >
                       {label.product.name}
                     </p>
                     {subtitle && (
-                      <p className="w-full truncate leading-none" style={{ fontSize: mm(size.height * 0.07) }}>
+                      <p className="w-full truncate leading-none" style={{ fontSize: mm(size.height * 0.055) }}>
                         {subtitle}
                       </p>
                     )}
                     <p className="tabular w-full break-all font-bold leading-tight" style={{ fontSize: mm(codeMm) }}>
                       {label.code}
                     </p>
-                    <p className="w-full truncate leading-none" style={{ fontSize: mm(size.height * 0.06) }}>
+                    <p className="w-full truncate leading-none" style={{ fontSize: mm(size.height * 0.05) }}>
                       {label.sequence}/{label.of} · {sheet.purchase.number}
                     </p>
                   </div>
