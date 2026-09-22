@@ -3,9 +3,11 @@ import {
   BarChart3,
   ClipboardCheck,
   Home,
+  Inbox,
   MoreHorizontal,
   Package,
   ScanLine,
+  SendHorizontal,
   ShoppingCart,
   Truck,
 } from 'lucide-react';
@@ -42,13 +44,19 @@ const SELLING_TABS = TABS.map((tab) =>
 );
 
 /**
- * Selling is an admin function (spec change): a warehouse account gets the
- * receiving history in the outbound slot instead of a till or a sales list
- * the API would refuse it anyway.
+ * Selling is an admin function (spec change): a warehouse account gets
+ * Receive — its incoming purchase orders and transfers from other
+ * warehouses — in place of Purchases, and Send — the transfer page, to
+ * ship stock out — in place of Sales.
  */
-const WAREHOUSE_TABS = TABS.map((tab) =>
-  tab.to === '/sales' ? { to: '/receipts', label: 'nav.receipts', icon: ClipboardCheck } : tab,
-);
+const WAREHOUSE_TABS = TABS.map((tab) => {
+  if (tab.to === '/purchases') return { to: '/receive', label: 'nav.receive', icon: Inbox };
+  if (tab.to === '/sales') return { to: '/transfers', label: 'nav.send', icon: SendHorizontal };
+  // Send now covers the transfer page, so this slot becomes past receipts
+  // instead of a second tab pointing at the same place.
+  if (tab.to === '/transfers') return { to: '/receipts', label: 'nav.receipts', icon: ClipboardCheck };
+  return tab;
+});
 
 export function MobileLayout() {
   const user = useAuth((s) => s.user);

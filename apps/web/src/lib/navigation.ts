@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   Coins,
   FileClock,
+  Inbox,
   LayoutDashboard,
   Mail,
   Package,
@@ -53,6 +54,7 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'nav.section.inbound',
     items: [
       { to: '/purchases', label: 'nav.purchases', icon: ShoppingCart },
+      { to: '/receive', label: 'nav.receive', icon: Inbox },
       { to: '/receipts', label: 'nav.receipts', icon: ClipboardCheck },
       { to: '/costs', label: 'nav.costs', icon: Coins },
     ],
@@ -126,12 +128,10 @@ export function navigationExcluding(user: AuthUser | null, exclude: string[]): N
 export const sellsAtCounter = (user: AuthUser | null): boolean => user?.countryCode === 'DZ';
 
 /** The five destinations on the phone's bottom bar, for this user. */
-export const bottomTabsFor = (user: AuthUser | null): string[] => [
-  '/purchases',
-  // Selling is an admin function; a warehouse account gets the receiving
-  // history in that slot instead of a till or a sales list it cannot open.
-  isAdmin(user) ? (sellsAtCounter(user) ? '/pos' : '/sales') : '/receipts',
-  '/scan',
-  '/transfers',
-  '/stock',
-];
+export const bottomTabsFor = (user: AuthUser | null): string[] =>
+  isAdmin(user)
+    ? ['/purchases', sellsAtCounter(user) ? '/pos' : '/sales', '/scan', '/transfers', '/stock']
+    : // Selling is an admin function; a warehouse account gets Receive (its
+      // incoming purchase orders and transfers) and Send (the transfer page)
+      // instead of Purchases and Sales; past receipts take the slot Send freed up.
+      ['/receive', '/transfers', '/scan', '/receipts', '/stock'];
