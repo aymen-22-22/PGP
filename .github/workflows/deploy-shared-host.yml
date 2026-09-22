@@ -35,11 +35,17 @@ name: Deploy to shared host
 #                        with SSH_ASKPASS. Leave the secret unset (or empty)
 #                        if a future key genuinely has none.
 #
-# Optional repository variables (Settings → Variables → Actions). Both
-# accept a leading ~, expanded against the account's home directory:
-#   DEPLOY_APP_DIR  — the application checkout on the host, default ~/PGP-erp
-#   DEPLOY_WEB_ROOT — the document root the web build is published to,
-#                     default ~/pgp.etdledger.com
+# Optional repository variables (Settings → Variables → Actions).
+# DEPLOY_APP_DIR and DEPLOY_WEB_ROOT accept a leading ~, expanded against the
+# account's home directory:
+#   DEPLOY_APP_DIR   — the application checkout on the host, default ~/PGP-erp
+#   DEPLOY_WEB_ROOT  — the document root the web build is published to,
+#                      default ~/pgp.etdledger.com
+#   DEPLOY_PUBLIC_URL — the site's real public URL, default
+#                      https://pgp.etdledger.com. Only used for the
+#                      post-deploy health check — DEPLOY_SSH_HOST is an SSH
+#                      endpoint (often a server hostname, not the domain
+#                      visitors use) and is never assumed to also serve HTTP.
 
 on:
   workflow_run:
@@ -135,11 +141,13 @@ jobs:
           ssh -p "$SSH_PORT" "$DEST" rm -f /tmp/pgp-deploy-remote.sh
 
       - name: Verify the API answered
+        env:
+          PUBLIC_URL: ${{ vars.DEPLOY_PUBLIC_URL || 'https://pgp.etdledger.com' }}
         run: |
           sleep 5
-          code="$(curl -s -o /dev/null -w '%{http_code}' "https://${{ secrets.DEPLOY_SSH_HOST }}/api/v1/auth/me" || echo 000)"
-          echo "auth/me responded $code"
+          code="$(curl -s -o /dev/null -w '%{http_code}' "$PUBLIC_URL/api/v1/auth/me" || echo 000)"
+          echo "$PUBLIC_URL/api/v1/auth/me responded $code"
           # 401 is success here: the API is up and correctly asking for a login.
           if [ "$code" != "401" ]; then
-            echo "::warning::The API did not answer 401 after deploy (got $code). Check the host — this does not fail the job, since the health-check URL may differ from the SSH host."
+            echo "::warning::The API did not answer 401 after deploy (got $code from $PUBLIC_URL). If this URL is wrong for your setup, set the DEPLOY_PUBLIC_URL repository variable."
           fi

@@ -366,7 +366,11 @@ Set it up once:
 4. If the application checkout or the web document root are not at
    `~/PGP-erp` and `~/pgp.etdledger.com`, add `DEPLOY_APP_DIR` and/or
    `DEPLOY_WEB_ROOT` as repository **variables** (same page, Variables tab)
-   instead of secrets — they're paths, not credentials.
+   instead of secrets — they're paths, not credentials. Same tab, if the
+   site's public URL is not `https://pgp.etdledger.com`, add
+   `DEPLOY_PUBLIC_URL` — it's only used for the post-deploy health check,
+   since `DEPLOY_SSH_HOST` is an SSH endpoint and often isn't the same as
+   the domain visitors use.
 
 From then on, every merge to `main` deploys automatically. To deploy without
 waiting for a merge — after setting up the secrets, or to retry a failed
