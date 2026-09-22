@@ -47,6 +47,8 @@ const ar: Record<string, string> = {
 
   'common.back': 'رجوع',
   'common.cancel': 'إلغاء',
+  'common.cancelDocument': 'إلغاء',
+  'common.confirm': 'نعم، ألغِ',
   'common.save': 'حفظ',
   'common.saving': 'جارٍ الحفظ…',
   'common.search': 'بحث',
@@ -405,6 +407,8 @@ const ar: Record<string, string> = {
 
   'purchase.loading': 'جارٍ تحميل الشراء…',
   'purchase.all': 'كل المشتريات',
+  'purchase.cancelConfirm': 'إلغاء أمر الشراء هذا؟ لا يمكن التراجع عن هذا الإجراء.',
+  'purchase.cancelled': 'تم إلغاء الشراء.',
   'purchase.ordered': 'المُطلب',
   'purchase.goodsIn': 'إيصالات استلام البضائع',
   'purchase.receiving': 'جارٍ الاستلام…',
@@ -489,6 +493,8 @@ const ar: Record<string, string> = {
 
   'sale.loading': 'جارٍ تحميل البيع…',
   'sale.all': 'كل المبيعات',
+  'sale.cancelConfirm': 'إلغاء هذا البيع؟ لا يمكن التراجع عن هذا الإجراء.',
+  'sale.cancelled': 'تم إلغاء البيع.',
   'sale.walkInCustomer': 'زبون عابر',
   'sale.from': 'من {warehouse}',
   'sale.completed': 'أُنجزت في {date}',
@@ -813,6 +819,8 @@ const ar: Record<string, string> = {
   'transfers.createdManual': 'أُنشئ {number}. امسح الهواتف لتحميله.',
 
   'transfer.all': 'كل التحويلات',
+  'transfer.cancelConfirm': 'إلغاء هذا التحويل؟ لا يمكن التراجع عن هذا الإجراء.',
+  'transfer.cancelled': 'تم إلغاء التحويل.',
   'transfer.planned': 'مخطط',
   'transfer.loaded': 'محمّل',
   'transfer.shipment': 'الشحنة',

@@ -43,6 +43,8 @@ const fr: Record<string, string> = {
 
   'common.back': 'Retour',
   'common.cancel': 'Annuler',
+  'common.cancelDocument': 'Annuler',
+  'common.confirm': 'Oui, annuler',
   'common.save': 'Enregistrer',
   'common.saving': 'Enregistrement…',
   'common.search': 'Rechercher',
@@ -355,6 +357,8 @@ const fr: Record<string, string> = {
 
   'purchase.loading': 'Chargement de l’achat…',
   'purchase.all': 'Tous les achats',
+  'purchase.cancelConfirm': 'Annuler ce bon d’achat ? Cette action est irréversible.',
+  'purchase.cancelled': 'Achat annulé.',
   'purchase.ordered': 'Commandé',
   'purchase.goodsIn': 'Réceptions de marchandises',
   'purchase.receiving': 'Réception…',
@@ -403,6 +407,8 @@ const fr: Record<string, string> = {
 
   'sale.loading': 'Chargement de la vente…',
   'sale.all': 'Toutes les ventes',
+  'sale.cancelConfirm': 'Annuler cette vente ? Cette action est irréversible.',
+  'sale.cancelled': 'Vente annulée.',
   'sale.walkInCustomer': 'Client au comptoir',
   'sale.from': 'Depuis {warehouse}',
   'sale.completed': 'terminée le {date}',
@@ -676,6 +682,8 @@ const fr: Record<string, string> = {
   'transfers.createdManual': '{number} créé. Scannez les téléphones pour le charger.',
 
   'transfer.all': 'Tous les transferts',
+  'transfer.cancelConfirm': 'Annuler ce transfert ? Cette action est irréversible.',
+  'transfer.cancelled': 'Transfert annulé.',
   'transfer.planned': 'Prévus',
   'transfer.loaded': 'Chargés',
   'transfer.shipment': 'Expédition',

@@ -48,6 +48,8 @@ const en = {
   // ── things said on many screens ───────────────────────────────────────────
   'common.back': 'Back',
   'common.cancel': 'Cancel',
+  'common.cancelDocument': 'Cancel',
+  'common.confirm': 'Yes, cancel it',
   'common.save': 'Save',
   'common.saving': 'Saving…',
   'common.search': 'Search',
@@ -361,6 +363,8 @@ const en = {
   'purchase.all': 'All purchases',
   'purchase.ordered': 'Ordered',
   'purchase.goodsIn': 'Goods-in receipts',
+  'purchase.cancelConfirm': 'Cancel this purchase order? This cannot be undone.',
+  'purchase.cancelled': 'Purchase cancelled.',
   'purchase.receiving': 'Receiving…',
   'purchase.receiveInto': 'Receive into {warehouse}',
   'purchase.receivingProduct': 'Product being received',
@@ -409,6 +413,8 @@ const en = {
   'sale.all': 'All sales',
   'sale.walkInCustomer': 'Walk-in customer',
   'sale.from': 'From {warehouse}',
+  'sale.cancelConfirm': 'Cancel this sale? This cannot be undone.',
+  'sale.cancelled': 'Sale cancelled.',
   'sale.completed': 'completed {date}',
   'sale.qty': 'Qty',
   'sale.picked': 'Picked',
@@ -685,6 +691,8 @@ const en = {
 
   // ── transfer detail ───────────────────────────────────────────────────────
   'transfer.all': 'All transfers',
+  'transfer.cancelConfirm': 'Cancel this transfer? This cannot be undone.',
+  'transfer.cancelled': 'Transfer cancelled.',
   'transfer.planned': 'Planned',
   'transfer.loaded': 'Loaded',
   'transfer.shipment': 'Shipment',

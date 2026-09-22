@@ -1,6 +1,7 @@
 import { ArrowLeft, PackageCheck, Wand2 } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { CancelAction } from '@/components/cancel-action';
 import { StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -49,6 +50,7 @@ interface SaleDetail {
 export default function SaleDetailPage() {
   const { t, dateTime, money } = useI18n();
   const { id } = useParams<{ id: string }>();
+  const toast = useToast();
   const query = useApiQuery<SaleDetail>(`/sales/${id}`);
 
   if (query.isLoading) return <LoadingState label={t('sale.loading')} />;
@@ -57,6 +59,7 @@ export default function SaleDetailPage() {
   const sale = query.data!;
   const outstanding = sale.items.reduce((sum, i) => sum + (i.quantity - i.pickedCount), 0);
   const canComplete = outstanding > 0 && ['DRAFT', 'CONFIRMED'].includes(sale.status);
+  const canCancel = ['DRAFT', 'CONFIRMED'].includes(sale.status);
   const profit = (Number(sale.totalAmount) - Number(sale.totalCost)).toFixed(2);
 
   return (
@@ -81,6 +84,18 @@ export default function SaleDetailPage() {
             </div>
             <StatusBadge status={sale.status} />
           </div>
+
+          {canCancel && (
+            <CancelAction
+              path={`/sales/${id}/cancel`}
+              confirmLabel={t('sale.cancelConfirm')}
+              invalidatePrefixes={['/sales']}
+              onDone={() => {
+                toast.push('success', t('sale.cancelled'));
+                void query.refetch();
+              }}
+            />
+          )}
 
           <TableWrap className="border-x-0">
             <thead>

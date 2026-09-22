@@ -1,6 +1,7 @@
 import { ArrowLeft, ArrowRight, PackageCheck, Send, Wand2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { CancelAction } from '@/components/cancel-action';
 import { StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -46,6 +47,7 @@ export default function TransferDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { t, dateTime } = useI18n();
   const user = useAuth((s) => s.user);
+  const toast = useToast();
   const query = useApiQuery<TransferDetail>(`/transfers/${id}`);
 
   if (query.isLoading) return <LoadingState label={t('common.loading')} />;
@@ -56,6 +58,7 @@ export default function TransferDetailPage() {
   const isDestination = user?.role === 'ADMIN' || user?.warehouseId === transfer.destinationWarehouse.id;
   const canShip = isSource && ['DRAFT', 'READY'].includes(transfer.status);
   const canReceive = isDestination && transfer.status === 'IN_TRANSIT';
+  const canCancel = isSource && ['DRAFT', 'READY'].includes(transfer.status);
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
@@ -79,6 +82,18 @@ export default function TransferDetailPage() {
             </div>
             <StatusBadge status={transfer.status} />
           </div>
+
+          {canCancel && (
+            <CancelAction
+              path={`/transfers/${id}/cancel`}
+              confirmLabel={t('transfer.cancelConfirm')}
+              invalidatePrefixes={['/transfers']}
+              onDone={() => {
+                toast.push('success', t('transfer.cancelled'));
+                void query.refetch();
+              }}
+            />
+          )}
 
           <div className="grid grid-cols-3 gap-2 border-t pt-3 text-center">
             <Figure label={t('transfer.planned')} value={transfer.plannedQuantity} />
