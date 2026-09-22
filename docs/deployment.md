@@ -340,8 +340,42 @@ version receives HTML where it expects JavaScript.
 
 ## 6. Updating a deployment
 
+### The automated route (recommended)
+
+`.github/workflows/deploy-shared-host.yml` does the whole round on its own —
+build, migrate, ship, restart — every time CI passes on `main`. Nothing runs
+on the host except unpacking a tarball and a restart; the build (and
+`prisma generate`) happens on the runner for the same reason
+`build-artifacts.yml` does, because the host's thread cap can kill either one
+partway through. Once it's set up, a merged PR is the whole deploy.
+
+Set it up once:
+
+1. Generate a key pair dedicated to this: `ssh-keygen -t ed25519 -f deploy_key -N ""`.
+2. Install the **public** half on the host — cPanel → SSH Access → Manage SSH
+   Keys → Import Key, or append `deploy_key.pub`'s contents to
+   `~/.ssh/authorized_keys` by hand.
+3. In the repository's GitHub settings, add these secrets (Settings →
+   Secrets and variables → Actions → Secrets): `DEPLOY_SSH_HOST`,
+   `DEPLOY_SSH_PORT`, `DEPLOY_SSH_USER` (cPanel's SSH Access page shows the
+   host and port), and `DEPLOY_SSH_KEY` — the **private** half,
+   `deploy_key`'s contents, never `deploy_key.pub`.
+4. If the application checkout or the web document root are not at
+   `~/PGP-erp` and `~/pgp.etdledger.com`, add `DEPLOY_APP_DIR` and/or
+   `DEPLOY_WEB_ROOT` as repository **variables** (same page, Variables tab)
+   instead of secrets — they're paths, not credentials.
+
+From then on, every merge to `main` deploys automatically. To deploy without
+waiting for a merge — after setting up the secrets, or to retry a failed
+run — trigger it by hand from **Actions → Deploy to shared host → Run
+workflow**.
+
+### The manual route
+
 Where the repository is cloned on the host, `scripts/deploy.sh` does the whole
-round — pull, install, build, publish the web app, restart:
+round — pull, install, build, publish the web app, restart — run by hand from
+an SSH session. Useful for a first deploy before the secrets above exist, or
+on a host the automated route isn't set up for:
 
 ```bash
 source ~/nodevenv/<app>/<version>/bin/activate && cd ~/<app-root>

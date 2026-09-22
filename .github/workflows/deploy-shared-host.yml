@@ -1,0 +1,117 @@
+name: Deploy to shared host
+
+# Zero-touch delivery for the shared-hosting deployment (docs/deployment.md
+# §"cPanel / Plesk"). Fires automatically once CI is green on main, so a
+# merge is genuinely the last manual step: no downloading an artifact zip,
+# no uploading it, no running prisma generate on a host that cannot.
+#
+# Builds and generates the Prisma client on the runner — the host's thread
+# cap is what build-artifacts.yml was written to work around (see its own
+# header) — then ships the result over SSH and restarts. Prisma migrations
+# are applied first, against Neon directly, the same way neon-migrate.yml
+# does it manually; that workflow stays for ad-hoc use, this one folds the
+# same step into the pipeline so nobody has to remember to run it.
+#
+# Required repository secrets:
+#   NEON_DATABASE_URL — already used by neon-migrate.yml.
+#   DEPLOY_SSH_HOST    — the host to SSH to (your domain or the server name
+#                        cPanel's SSH Access page shows).
+#   DEPLOY_SSH_PORT    — usually 22; cPanel sometimes assigns another port,
+#                        shown on the same SSH Access page.
+#   DEPLOY_SSH_USER    — your cPanel account username.
+#   DEPLOY_SSH_KEY     — a private key whose matching public key is
+#                        installed for that account (cPanel → SSH Access →
+#                        Manage SSH Keys → Import Key, or appended to
+#                        ~/.ssh/authorized_keys by hand). Generate a pair
+#                        dedicated to this with:
+#                          ssh-keygen -t ed25519 -f deploy_key -N ""
+#                        and paste deploy_key's contents into this secret —
+#                        never deploy_key.pub, which is the one that goes on
+#                        the host.
+#
+# Optional repository variables (Settings → Variables → Actions). Both
+# accept a leading ~, expanded against the account's home directory:
+#   DEPLOY_APP_DIR  — the application checkout on the host, default ~/PGP-erp
+#   DEPLOY_WEB_ROOT — the document root the web build is published to,
+#                     default ~/pgp.etdledger.com
+
+on:
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-shared-host
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate -w @phone-erp/api
+
+      - name: Apply pending migrations
+        run: npm run db:deploy -w @phone-erp/api
+
+      - name: Build
+        run: npm run build
+
+      # Natural relative paths, so the same tar can be extracted straight
+      # into the application root on the host with no path rewriting.
+      - name: Package the build
+        run: tar czf /tmp/pgp-deploy-payload.tar.gz node_modules/.prisma apps/api/dist apps/web/dist packages/shared-types/dist
+
+      - name: Configure SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Trust the host key
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "${{ secrets.DEPLOY_SSH_PORT }}" "${{ secrets.DEPLOY_SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Ship and unpack
+        env:
+          SSH_PORT: ${{ secrets.DEPLOY_SSH_PORT }}
+          SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          APP_DIR: ${{ vars.DEPLOY_APP_DIR || '~/PGP-erp' }}
+          WEB_ROOT: ${{ vars.DEPLOY_WEB_ROOT || '~/pgp.etdledger.com' }}
+        run: |
+          DEST="$SSH_USER@$SSH_HOST"
+          scp -P "$SSH_PORT" /tmp/pgp-deploy-payload.tar.gz "$DEST:/tmp/pgp-deploy-payload.tar.gz"
+          scp -P "$SSH_PORT" scripts/deploy-remote.sh "$DEST:/tmp/pgp-deploy-remote.sh"
+          ssh -p "$SSH_PORT" "$DEST" bash /tmp/pgp-deploy-remote.sh "$APP_DIR" "$WEB_ROOT"
+          ssh -p "$SSH_PORT" "$DEST" rm -f /tmp/pgp-deploy-remote.sh
+
+      - name: Verify the API answered
+        run: |
+          sleep 5
+          code="$(curl -s -o /dev/null -w '%{http_code}' "https://${{ secrets.DEPLOY_SSH_HOST }}/api/v1/auth/me" || echo 000)"
+          echo "auth/me responded $code"
+          # 401 is success here: the API is up and correctly asking for a login.
+          if [ "$code" != "401" ]; then
+            echo "::warning::The API did not answer 401 after deploy (got $code). Check the host — this does not fail the job, since the health-check URL may differ from the SSH host."
+          fi
