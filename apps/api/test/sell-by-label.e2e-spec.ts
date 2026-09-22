@@ -61,7 +61,18 @@ describe('Selling a label-received device', () => {
   });
 
   it('names the scanned label when the phone is not sellable', async () => {
-    // Sell it once...
+    // A second unit, so the order below has stock to be raised against — the
+    // point of the test is the scan being refused, not the order.
+    const labels = await as(app, admin)
+      .post(`/api/v1/purchases/${fixture.purchase.id}/labels`)
+      .expect(200);
+    const spare = labels.body.data.find((l: { code: string }) => l.code !== label).code as string;
+    await as(app, admin)
+      .post(`/api/v1/purchases/${fixture.purchase.id}/receive-by-label`)
+      .send({ code: spare })
+      .expect(200);
+
+    // Sell the first one...
     const first = await as(app, admin)
       .post('/api/v1/sales')
       .send({
