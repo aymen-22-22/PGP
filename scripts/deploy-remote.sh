@@ -21,6 +21,20 @@ app_dir="${1/#\~/$HOME}"
 web_root="${2/#\~/$HOME}"
 
 cd "$app_dir"
+
+# node is not on PATH in a bare, non-interactive SSH command — cPanel's
+# Node apps only get it through the nodevenv it creates, which has to be
+# sourced explicitly (same as every manual deploy in this project's docs).
+# Matched by app folder name so a future Node version bump on the host
+# still finds it without editing this script.
+nodevenv_activate="$(ls -d "$HOME"/nodevenv/"$(basename "$app_dir")"/*/bin/activate 2>/dev/null | head -n1)"
+if [ -n "$nodevenv_activate" ]; then
+  # shellcheck disable=SC1090
+  source "$nodevenv_activate"
+else
+  echo "::warning::No nodevenv found for $(basename "$app_dir") under \$HOME/nodevenv — relying on node already being on PATH." >&2
+fi
+
 git fetch origin main
 git checkout main
 git reset --hard origin/main
