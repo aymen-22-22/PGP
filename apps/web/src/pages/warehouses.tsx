@@ -117,6 +117,7 @@ export default function WarehousesPage() {
                       <ImageIcon className="h-3.5 w-3.5" aria-hidden />
                       {warehouse.imageUrl ? t('wh.changePhoto') : t('wh.addPhoto')}
                     </Button>
+                    <WarehouseToggle warehouse={warehouse} onChanged={() => void warehouses.refetch()} />
                   </div>
                 </Td>
               </Tr>
@@ -151,6 +152,31 @@ export default function WarehousesPage() {
         )}
       </section>
     </div>
+  );
+}
+
+function WarehouseToggle({ warehouse, onChanged }: { warehouse: WarehouseRow; onChanged: () => void }) {
+  const { t } = useI18n();
+  const toast = useToast();
+  const toggle = useApiMutation(
+    (isActive: boolean) => api.patch(`/warehouses/${warehouse.id}`, { isActive }),
+    ['/warehouses'],
+  );
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={toggle.isPending}
+      onClick={() =>
+        toggle.mutate(!warehouse.isActive, {
+          onSuccess: onChanged,
+          onError: (error) => toast.push('error', error.message),
+        })
+      }
+    >
+      {warehouse.isActive ? t('users.deactivate') : t('users.activate')}
+    </Button>
   );
 }
 

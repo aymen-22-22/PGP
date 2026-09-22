@@ -1,5 +1,6 @@
 import { Building2, Plus, Truck, User } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/page';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -153,7 +154,11 @@ function CompanyRowItem({ company, onChanged }: { company: CompanyRow; onChanged
 
   return (
     <Tr>
-      <Td className="font-medium">{company.name}</Td>
+      <Td className="font-medium">
+        <Link to={`/delivery/companies/${company.id}`} className="hover:underline">
+          {company.name}
+        </Link>
+      </Td>
       <Td className="text-muted-foreground">
         {[company.contact, company.phone].filter(Boolean).join(' · ') || '—'}
       </Td>
@@ -190,7 +195,11 @@ function DriverRowItem({ driver, onChanged }: { driver: DriverRow; onChanged: ()
 
   return (
     <Tr>
-      <Td className="font-medium">{driver.name}</Td>
+      <Td className="font-medium">
+        <Link to={`/delivery/drivers/${driver.id}`} className="hover:underline">
+          {driver.name}
+        </Link>
+      </Td>
       <Td className="text-muted-foreground">{driver.company?.name ?? '—'}</Td>
       <Td className="tabular text-muted-foreground">{driver.phone ?? '—'}</Td>
       <Td>{!driver.isActive && <Badge variant="secondary">{t('users.inactive')}</Badge>}</Td>

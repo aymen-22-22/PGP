@@ -7,6 +7,7 @@ import { DeliveryService } from './delivery.service';
 import {
   CreateDeliveryCompanyDto,
   CreateDriverDto,
+  QueryCarrierShipmentsDto,
   QueryDeliveryDto,
   UpdateDeliveryCompanyDto,
   UpdateDriverDto,
@@ -52,6 +53,13 @@ export class DeliveryController {
     return this.delivery.removeCompany(user, id);
   }
 
+  @Get('companies/:id/shipments')
+  @AdminOnly()
+  @ApiOperation({ summary: 'Everything this transport firm has carried, filterable by status' })
+  companyShipments(@Param('id', ParseUUIDPipe) id: string, @Query() query: QueryCarrierShipmentsDto) {
+    return this.delivery.companyShipments(id, query);
+  }
+
   @Get('drivers')
   @ApiOperation({ summary: 'Drivers — active only unless asked otherwise' })
   listDrivers(@Query() query: QueryDeliveryDto) {
@@ -81,5 +89,12 @@ export class DeliveryController {
   @ApiOperation({ summary: 'Delete a driver who has never carried anything' })
   removeDriver(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.delivery.removeDriver(user, id);
+  }
+
+  @Get('drivers/:id/shipments')
+  @AdminOnly()
+  @ApiOperation({ summary: 'Everything this driver has carried, filterable by status' })
+  driverShipments(@Param('id', ParseUUIDPipe) id: string, @Query() query: QueryCarrierShipmentsDto) {
+    return this.delivery.driverShipments(id, query);
   }
 }

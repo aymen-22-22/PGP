@@ -96,7 +96,7 @@ export default function StockProductsPage() {
                   {showMoney ? (
                     <div>
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">{t('stock.stockValue')}</p>
-                      <p className="tabular font-bold">{money(product.stockValue)}</p>
+                      <p className="tabular font-bold">{money(product.stockValue!)}</p>
                     </div>
                   ) : (
                     <span />

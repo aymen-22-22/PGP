@@ -146,12 +146,12 @@ export default function StockProduct360Page() {
 
           <dl className="grid gap-3 border-t pt-3 text-sm sm:grid-cols-3">
             {showMoney && (
-              <Field label={t('stock.stockValue')} value={money(stock.stockValue, stock.currency)} />
+              <Field label={t('stock.stockValue')} value={money(stock.stockValue!, stock.currency)} />
             )}
             {showMoney && (
               <Field
                 label={serialised ? t('stock360.avgLandedCost') : t('stock360.avgUnitCost')}
-                value={money(stock.unitCost, stock.currency)}
+                value={money(stock.unitCost!, stock.currency)}
               />
             )}
             <Field

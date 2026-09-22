@@ -69,17 +69,12 @@ export default function PartnersPage({ kind }: { kind: 'customers' | 'suppliers'
                 <Th>{t('users.email')}</Th>
                 <Th>{t('partners.phone')}</Th>
                 <Th />
+                {isAdmin(user) && <Th />}
               </tr>
             </thead>
             <tbody>
               {query.data.data.map((party) => (
-                <Tr key={party.id}>
-                  <Td className="font-medium">{party.name}</Td>
-                  <Td className="text-muted-foreground">{party.country ?? '—'}</Td>
-                  <Td className="text-muted-foreground">{party.email ?? '—'}</Td>
-                  <Td className="tabular text-muted-foreground">{party.phone ?? '—'}</Td>
-                  <Td>{!party.isActive && <Badge variant="secondary">{t('users.inactive')}</Badge>}</Td>
-                </Tr>
+                <PartyRow key={party.id} kind={kind} party={party} canToggle={isAdmin(user)} onChanged={() => void query.refetch()} />
               ))}
             </tbody>
           </TableWrap>
@@ -87,6 +82,51 @@ export default function PartnersPage({ kind }: { kind: 'customers' | 'suppliers'
         </>
       )}
     </div>
+  );
+}
+
+function PartyRow({
+  kind,
+  party,
+  canToggle,
+  onChanged,
+}: {
+  kind: 'customers' | 'suppliers';
+  party: Party;
+  canToggle: boolean;
+  onChanged: () => void;
+}) {
+  const { t } = useI18n();
+  const toast = useToast();
+  const toggle = useApiMutation((isActive: boolean) => api.patch(`/${kind}/${party.id}`, { isActive }), [`/${kind}`]);
+
+  return (
+    <Tr>
+      <Td className="font-medium">{party.name}</Td>
+      <Td className="text-muted-foreground">{party.country ?? '—'}</Td>
+      <Td className="text-muted-foreground">{party.email ?? '—'}</Td>
+      <Td className="tabular text-muted-foreground">{party.phone ?? '—'}</Td>
+      <Td>{!party.isActive && <Badge variant="secondary">{t('users.inactive')}</Badge>}</Td>
+      {canToggle && (
+        <Td>
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={toggle.isPending}
+              onClick={() =>
+                toggle.mutate(!party.isActive, {
+                  onSuccess: onChanged,
+                  onError: (error) => toast.push('error', error.message),
+                })
+              }
+            >
+              {party.isActive ? t('users.deactivate') : t('users.activate')}
+            </Button>
+          </div>
+        </Td>
+      )}
+    </Tr>
   );
 }
 

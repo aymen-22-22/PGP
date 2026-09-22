@@ -76,7 +76,7 @@ export default function StockCategoriesPage() {
                   <div className="flex items-center justify-between border-t pt-1">
                     <dt className="text-muted-foreground">{t('stock.value')}</dt>
                     <dd className="tabular font-bold text-success">
-                      {money(category.stockValue, category.currency, { round: true })}
+                      {money(category.stockValue!, category.currency, { round: true })}
                     </dd>
                   </div>
                 )}

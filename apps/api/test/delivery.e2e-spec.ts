@@ -104,4 +104,50 @@ describe('Delivery companies and drivers', () => {
 
     await as(app, admin).delete(`/api/v1/delivery/companies/${company.body.id}`).expect(409);
   });
+
+  it('lists everything a company or driver has carried, filterable by status, admin-only', async () => {
+    const company = await as(app, admin).post('/api/v1/delivery/companies').send({ name: 'XYZ Transport' }).expect(201);
+    const driver = await as(app, admin)
+      .post('/api/v1/delivery/drivers')
+      .send({ name: 'Ahmed', companyId: company.body.id })
+      .expect(201);
+    await receiveDevices(app, admin, fixture, 1);
+
+    const transfer = await as(app, admin)
+      .post('/api/v1/transfers')
+      .send({
+        sourceWarehouseId: fixture.central.id,
+        destinationWarehouseId: fixture.france.id,
+        items: [{ productId: fixture.product.id, quantity: 1 }],
+        autoFill: true,
+        deliveryCompanyId: company.body.id,
+        driverId: driver.body.id,
+      })
+      .expect(201);
+    await as(app, admin).post(`/api/v1/transfers/${transfer.body.id}/ship`).expect(200);
+
+    const companyShipments = await as(app, admin)
+      .get(`/api/v1/delivery/companies/${company.body.id}/shipments`)
+      .expect(200);
+    expect(companyShipments.body.carrier.name).toBe('XYZ Transport');
+    expect(companyShipments.body.data).toHaveLength(1);
+    expect(companyShipments.body.data[0].transfer.number).toBe(transfer.body.number);
+    expect(companyShipments.body.data[0].transfer.items[0]).toMatchObject({
+      sku: fixture.product.sku,
+      quantity: 1,
+    });
+
+    const driverShipments = await as(app, admin)
+      .get(`/api/v1/delivery/drivers/${driver.body.id}/shipments`)
+      .expect(200);
+    expect(driverShipments.body.data).toHaveLength(1);
+
+    const wrongStatus = await as(app, admin)
+      .get(`/api/v1/delivery/companies/${company.body.id}/shipments?status=PREPARING`)
+      .expect(200);
+    expect(wrongStatus.body.data).toHaveLength(0);
+
+    // A warehouse account never sees who carried what — that is office information.
+    await as(app, jean).get(`/api/v1/delivery/companies/${company.body.id}/shipments`).expect(403);
+  });
 });

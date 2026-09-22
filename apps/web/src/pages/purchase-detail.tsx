@@ -1,5 +1,6 @@
 import { ArrowLeft, ScanLine, Tags } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { CancelAction } from '@/components/cancel-action';
 import { StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -105,6 +106,17 @@ export default function PurchaseDetailPage() {
                     {t('receiveScan.button')}
                   </Link>
                 </Button>
+              )}
+              {(purchase.status === 'DRAFT' || purchase.status === 'ORDERED') && (
+                <CancelAction
+                  path={`/purchases/${id}/cancel`}
+                  confirmLabel={t('purchase.cancelConfirm')}
+                  invalidatePrefixes={['/purchases']}
+                  onDone={() => {
+                    toast.push('success', t('purchase.cancelled'));
+                    void query.refetch();
+                  }}
+                />
               )}
             </div>
           )}

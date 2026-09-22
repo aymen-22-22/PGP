@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsEmail, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
+import { ShipmentStatus } from '@prisma/client';
+import { IsBoolean, IsEmail, IsEnum, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 
 export class CreateDeliveryCompanyDto {
@@ -48,4 +49,11 @@ export class QueryDeliveryDto extends PaginationQueryDto {
   @IsOptional()
   @IsUUID()
   companyId?: string;
+}
+
+export class QueryCarrierShipmentsDto extends PaginationQueryDto {
+  @ApiPropertyOptional({ enum: ShipmentStatus })
+  @IsOptional()
+  @IsEnum(ShipmentStatus)
+  status?: ShipmentStatus;
 }

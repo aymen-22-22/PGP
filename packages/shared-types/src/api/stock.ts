@@ -17,7 +17,8 @@ export interface WarehouseStockCard {
   /** Distinct brands holding stock here. */
   categories: number;
   quantity: number;
-  stockValue: string;
+  /** Office information — the API omits it for a non-admin request, not just the client. */
+  stockValue?: string;
   currency: 'EUR';
 }
 
@@ -27,7 +28,8 @@ export interface BrandStockCard {
   category: string;
   products: number;
   quantity: number;
-  stockValue: string;
+  /** Office information — the API omits it for a non-admin request, not just the client. */
+  stockValue?: string;
   imageUrl: string | null;
   currency: 'EUR';
 }
@@ -44,8 +46,9 @@ export interface ProductStockRow {
   brandImageUrl: string | null;
   tracking: TrackingMode;
   quantity: number;
-  unitCost: string;
-  stockValue: string;
+  /** Office information — the API omits these for a non-admin request, not just the client. */
+  unitCost?: string;
+  stockValue?: string;
   salePrice: string;
   saleCurrency: string;
 }
@@ -82,8 +85,10 @@ export interface Product360 {
    * The product, with `category` carrying its brand name — the browser's
    * middle level. Deliberately not re-declaring `brand`: an intersection that
    * restates a field masks any change to it, which defeats the point.
+   *
+   * `purchasePrice` is office information — omitted for a non-admin request.
    */
-  product: Omit<Product, 'category'> & { category: string };
+  product: Omit<Product, 'category' | 'purchasePrice'> & { category: string; purchasePrice?: string };
   stock: {
     available: number;
     awaitingValidation: number;
@@ -92,8 +97,9 @@ export interface Product360 {
     returned: number;
     damaged: number;
     lost: number;
-    stockValue: string;
-    unitCost: string;
+    /** Office information — omitted for a non-admin request. */
+    stockValue?: string;
+    unitCost?: string;
     currency: 'EUR';
     status: StockStatus;
     countedAt: string | null;
@@ -104,9 +110,11 @@ export interface Product360 {
     /** Null on a unit received by label, which never had one. */
     imei: string | null;
     label: { code: string } | null;
-    landedCost: string | null;
+    /** Office information — omitted for a non-admin request. */
+    landedCost?: string | null;
     receivedAt: string | null;
   }[];
+  /** Office information — empty for a non-admin request, which never sees this section. */
   purchases: {
     purchaseId: string;
     number: string;
@@ -119,6 +127,7 @@ export interface Product360 {
     totalPrice: string;
     currency: string;
   }[];
+  /** Office information — empty for a non-admin request, which never sees this section. */
   sales: {
     saleId: string;
     number: string;
