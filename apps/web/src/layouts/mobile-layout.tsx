@@ -1,9 +1,9 @@
 import {
   Banknote,
   BarChart3,
-  ClipboardCheck,
   Home,
   Inbox,
+  LayoutDashboard,
   MoreHorizontal,
   Package,
   ScanLine,
@@ -25,7 +25,18 @@ import { cn } from '@/lib/utils';
  * Everything else lives on the More page, which lists every page the user may
  * open — see lib/navigation.ts.
  */
-const TABS = [
+interface Tab {
+  to: string;
+  /** A phrase key — translated where the bar is drawn. */
+  label: string;
+  icon: typeof Home;
+  /** Raised into the middle of the bar. */
+  centre?: boolean;
+  /** Match this path exactly, so "/" is not active on every page. */
+  end?: boolean;
+}
+
+const TABS: Tab[] = [
   { to: '/purchases', label: 'nav.purchases', icon: ShoppingCart },
   { to: '/sales', label: 'nav.sales', icon: BarChart3 },
   { to: '/scan', label: 'nav.scan', icon: ScanLine, centre: true },
@@ -44,19 +55,18 @@ const SELLING_TABS = TABS.map((tab) =>
 );
 
 /**
- * Selling is an admin function (spec change): a warehouse account gets
- * Receive — its incoming purchase orders and transfers from other
- * warehouses — in place of Purchases, and Send — the transfer page, to
- * ship stock out — in place of Sales.
+ * A warehouse account's whole job is stock in and stock out, so its bar says
+ * exactly that: Send and Receive either side of the scanner, then Stock and
+ * the dashboard. Purchases and Sales are office work and are gone from here —
+ * the API refuses a sale from this account anyway.
  */
-const WAREHOUSE_TABS = TABS.map((tab) => {
-  if (tab.to === '/purchases') return { to: '/receive', label: 'nav.receive', icon: Inbox };
-  if (tab.to === '/sales') return { to: '/transfers', label: 'nav.send', icon: SendHorizontal };
-  // Send now covers the transfer page, so this slot becomes past receipts
-  // instead of a second tab pointing at the same place.
-  if (tab.to === '/transfers') return { to: '/receipts', label: 'nav.receipts', icon: ClipboardCheck };
-  return tab;
-});
+const WAREHOUSE_TABS: Tab[] = [
+  { to: '/send', label: 'nav.send', icon: SendHorizontal },
+  { to: '/receive', label: 'nav.receive', icon: Inbox },
+  { to: '/scan', label: 'nav.scan', icon: ScanLine, centre: true },
+  { to: '/stock', label: 'nav.stock', icon: Package },
+  { to: '/', label: 'nav.dashboard', icon: LayoutDashboard, end: true },
+];
 
 export function MobileLayout() {
   const user = useAuth((s) => s.user);
@@ -90,12 +100,13 @@ export function MobileLayout() {
         aria-label="Main"
       >
         <ul className="mx-auto flex max-w-lg">
-          {tabs.map(({ to, label, icon: Icon, centre }) => (
+          {tabs.map(({ to, label, icon: Icon, centre, end }) => (
             // The raised scanner makes this row taller than a plain tab, so the
             // anchors must fill that height or the other four hang from the top.
             <li key={to} className="flex flex-1">
               <NavLink
                 to={to}
+                end={end}
                 className={({ isActive }) =>
                   cn(
                     'flex w-full touch-target flex-col items-center justify-center gap-0.5 px-0.5 py-2 text-center text-[0.65rem] font-medium leading-tight transition-colors',

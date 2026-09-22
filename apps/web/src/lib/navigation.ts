@@ -10,6 +10,7 @@ import {
   Mail,
   Package,
   ScanLine,
+  SendHorizontal,
   ShoppingCart,
   Tag,
   Truck,
@@ -62,6 +63,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: 'nav.section.distribution',
     items: [
+      { to: '/send', label: 'nav.send', icon: SendHorizontal },
       { to: '/transfers', label: 'nav.transfers', icon: Truck },
     ],
   },
@@ -131,7 +133,6 @@ export const sellsAtCounter = (user: AuthUser | null): boolean => user?.countryC
 export const bottomTabsFor = (user: AuthUser | null): string[] =>
   isAdmin(user)
     ? ['/purchases', sellsAtCounter(user) ? '/pos' : '/sales', '/scan', '/transfers', '/stock']
-    : // Selling is an admin function; a warehouse account gets Receive (its
-      // incoming purchase orders and transfers) and Send (the transfer page)
-      // instead of Purchases and Sales; past receipts take the slot Send freed up.
-      ['/receive', '/transfers', '/scan', '/receipts', '/stock'];
+    : // Stock in and stock out either side of the scanner: a warehouse account
+      // does not buy or sell, so Purchases and Sales are not on its bar at all.
+      ['/send', '/receive', '/scan', '/stock', '/'];
