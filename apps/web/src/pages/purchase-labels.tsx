@@ -203,10 +203,7 @@ export default function PurchaseLabelsPage() {
           `}</style>
           <div className="flex flex-wrap justify-center gap-4 print:block print:gap-0">
             {sheet.data.map((label) => {
-              // A small roll has no room for a subtitle line — better to show
-              // the code clearly than to shrink everything to fit it in.
-              const subtitle =
-                size.height >= 35 ? [label.product.storage, label.product.color].filter(Boolean).join(' · ') : '';
+              const subtitle = [label.product.storage, label.product.color].filter(Boolean).join(' · ');
               return (
                 <div
                   key={label.id}
@@ -216,26 +213,25 @@ export default function PurchaseLabelsPage() {
                   // that lands a fraction of a pixel over the page boundary
                   // gets fragmented by the browser's own pagination rather
                   // than pushed whole onto the next page.
-                  className="label-page flex shrink-0 break-inside-avoid flex-col items-center justify-center gap-[0.8mm] overflow-hidden border border-dashed border-border bg-white p-[1mm] text-center text-black print:border-0 print:break-inside-avoid print:break-after-page print:last:break-after-auto"
+                  className="label-page flex shrink-0 break-inside-avoid items-center gap-[2mm] overflow-hidden border border-dashed border-border bg-white p-[1mm] text-black print:border-0 print:break-inside-avoid print:break-after-page print:last:break-after-auto"
                 >
-                  <p
-                    className="w-full truncate font-semibold leading-none"
-                    style={{ fontSize: mm(size.height * 0.065) }}
-                  >
-                    {label.product.name}
-                  </p>
-                  {subtitle && (
-                    <p className="w-full truncate leading-none" style={{ fontSize: mm(size.height * 0.05) }}>
-                      {subtitle}
+                  <CodeSymbol value={label.code} size={Math.round(mm(size.height * 0.72))} />
+                  <div className="flex min-w-0 flex-1 flex-col justify-center gap-[0.5mm]">
+                    <p className="w-full truncate font-semibold leading-none" style={{ fontSize: mm(size.height * 0.15) }}>
+                      {label.product.name}
                     </p>
-                  )}
-                  <CodeSymbol value={label.code} size={Math.round(mm(size.height * 0.58))} />
-                  <p className="tabular font-bold leading-none" style={{ fontSize: mm(size.height * 0.09) }}>
-                    {label.code}
-                  </p>
-                  <p className="leading-none" style={{ fontSize: mm(size.height * 0.05) }}>
-                    {label.sequence}/{label.of} · {sheet.purchase.number}
-                  </p>
+                    {subtitle && (
+                      <p className="w-full truncate leading-none" style={{ fontSize: mm(size.height * 0.1) }}>
+                        {subtitle}
+                      </p>
+                    )}
+                    <p className="tabular font-bold leading-none" style={{ fontSize: mm(size.height * 0.2) }}>
+                      {label.code}
+                    </p>
+                    <p className="leading-none" style={{ fontSize: mm(size.height * 0.09) }}>
+                      {label.sequence}/{label.of} · {sheet.purchase.number}
+                    </p>
+                  </div>
                 </div>
               );
             })}
