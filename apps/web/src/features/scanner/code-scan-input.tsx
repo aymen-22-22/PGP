@@ -1,5 +1,6 @@
 import { AlertTriangle, CheckCircle2, Keyboard, Volume2, VolumeX } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { CameraScanner } from './camera-scanner';
 import { isScanFeedbackMuted, primeScanFeedback, scanFeedback, setScanFeedbackMuted } from './feedback';
 import { useScanGun } from './use-scan-gun';
 import { Button } from '@/components/ui/button';
@@ -20,12 +21,15 @@ export function CodeScanInput({
   label,
   autoFocus = true,
   disabled,
+  camera = true,
 }: {
   onScan: (code: string) => void;
   outcome: CodeOutcome | null;
   label?: string;
   autoFocus?: boolean;
   disabled?: boolean;
+  /** Off only where the camera would be in the way. */
+  camera?: boolean;
 }) {
   const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -93,6 +97,11 @@ export function CodeScanInput({
       </div>
 
       <CodeFeedback key={flashKey} outcome={outcome} />
+
+      {/* Three ways in, because a warehouse has all three: the gun above
+          (caught at the document), the phone camera here, and typing the code
+          off the label by hand when a label is scuffed or the gun is flat. */}
+      {camera && <CameraScanner onDetect={submit} />}
 
       <button
         type="button"

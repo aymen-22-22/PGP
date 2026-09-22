@@ -26,10 +26,19 @@ export class ImeisService {
   ) {}
 
   async findByImei(user: RequestUser, rawImei: string) {
-    const imei = normalizeSingleImei(rawImei, this.config.imei.enforceChecksum);
+    // A label-received phone has no IMEI, so its printed label is the only
+    // way to open its history. Anything else is still read as an IMEI.
+    const classified = classifyBarcode(rawImei);
+    const isLabel = classified.kind === 'LABEL';
+    const imei = isLabel
+      ? classified.code
+      : normalizeSingleImei(rawImei, this.config.imei.enforceChecksum);
+    const where: Prisma.DeviceWhereInput = isLabel
+      ? { label: { code: imei } }
+      : { OR: [{ imei }, { imei2: imei }] };
 
     const device = await this.prisma.device.findFirst({
-      where: { OR: [{ imei }, { imei2: imei }] },
+      where,
       include: {
         product: true,
         currentWarehouse: { select: { id: true, name: true, code: true, country: true } },
@@ -55,7 +64,12 @@ export class ImeisService {
       },
     });
     if (!device) {
-      throw new BusinessError(ErrorCode.IMEI_NOT_FOUND, 'No phone with this IMEI is known.', 404, { imei });
+      throw new BusinessError(
+        ErrorCode.IMEI_NOT_FOUND,
+        isLabel ? 'No phone carries this label.' : 'No phone with this IMEI is known.',
+        404,
+        { imei },
+      );
     }
 
     await this.assertVisible(user, device.currentWarehouseId, device.id);
@@ -171,6 +185,9 @@ export class ImeisService {
     if (classified.kind === 'IMEI') {
       return this.resolveImei(user, classified.imei, context);
     }
+    if (classified.kind === 'LABEL') {
+      return this.resolveLabel(user, classified.code, context);
+    }
     if (classified.kind === 'SERIAL') {
       return this.resolveSerial(user, classified.serial, context);
     }
@@ -185,6 +202,69 @@ export class ImeisService {
       code: ErrorCode.UNRECOGNIZED_BARCODE,
       message: 'This barcode was not recognized. Retry the scan or enter the value manually.',
     };
+  }
+
+  /**
+   * A unit label reserved when the order was placed.
+   *
+   * Until goods-in it has no device behind it, which is not an error worth
+   * shouting about: it means the phone has not arrived, and saying so is more
+   * use than "unknown code".
+   */
+  private async resolveLabel(
+    user: RequestUser,
+    code: string,
+    context: { warehouseId?: string; transferId?: string; expectStatus?: DeviceStatus; receiving?: boolean },
+  ) {
+    const label = await this.prisma.purchaseUnitLabel.findUnique({
+      where: { code },
+      select: {
+        code: true,
+        receivedAt: true,
+        device: {
+          select: {
+            id: true,
+            imei: true,
+            imei2: true,
+            serialNumber: true,
+            status: true,
+            currentWarehouseId: true,
+            product: { select: { id: true, name: true, sku: true } },
+            currentWarehouse: { select: { id: true, name: true } },
+          },
+        },
+        purchaseItem: {
+          select: { purchase: { select: { number: true, warehouseId: true } } },
+        },
+      },
+    });
+
+    if (!label) {
+      return {
+        kind: 'LABEL',
+        imei: code,
+        code: ErrorCode.IMEI_NOT_FOUND,
+        accepted: false,
+        message: 'Unknown label.',
+      };
+    }
+
+    if (!label.device) {
+      return {
+        kind: 'LABEL',
+        imei: code,
+        accepted: Boolean(context.receiving),
+        code: context.receiving ? 'LABEL_AWAITING_RECEIPT' : ErrorCode.IMEI_NOT_FOUND,
+        message: context.receiving
+          ? `Not yet received — scan it in against ${label.purchaseItem.purchase.number}.`
+          : `This label has not been received yet (${label.purchaseItem.purchase.number}).`,
+        device: null,
+      };
+    }
+
+    const blocked = await this.contextBlock(user, label.device, context);
+    if (blocked) return { kind: 'LABEL', imei: code, ...blocked, device: label.device };
+    return { kind: 'LABEL', imei: code, accepted: true, device: label.device };
   }
 
   private async resolveImei(

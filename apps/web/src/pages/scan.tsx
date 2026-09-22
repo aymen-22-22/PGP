@@ -7,13 +7,12 @@ import { BackButton } from '@/components/page';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { LoadingState } from '@/components/ui/states';
-import { CameraScanner } from '@/features/scanner/camera-scanner';
-import { ScanInput } from '@/features/scanner/scan-input';
-import { extractImei } from '@phone-erp/shared-types';
+import { CodeScanInput } from '@/features/scanner/code-scan-input';
+import { classifyBarcode } from '@phone-erp/shared-types';
 import { useT } from '@/i18n/provider';
 import { api } from '@/lib/api';
-import { formatImei } from '@/lib/utils';
-import type { ScanOutcome } from '@/features/scanner/use-scan-buffer';
+import { formatImei, formatScanCode } from '@/lib/utils';
+import type { CodeOutcome } from '@/features/scanner/use-code-buffer';
 
 interface SearchHit {
   id: string;
@@ -30,7 +29,8 @@ interface VerifyResponse {
   message?: string;
   device?: {
     id: string;
-    imei: string;
+    /** Null on a phone received by label, which never had one. */
+    imei: string | null;
     status: DeviceStatus;
     product: { id: string; name: string; sku: string };
     currentWarehouse: { id: string; name: string } | null;
@@ -44,7 +44,7 @@ interface VerifyResponse {
 export default function ScanPage() {
   const t = useT();
   const navigate = useNavigate();
-  const [outcome, setOutcome] = useState<ScanOutcome | null>(null);
+  const [outcome, setOutcome] = useState<CodeOutcome | null>(null);
   const [result, setResult] = useState<VerifyResponse | null>(null);
   const [matches, setMatches] = useState<SearchHit[] | null>(null);
   const [scanned, setScanned] = useState<string | null>(null);
@@ -53,24 +53,25 @@ export default function ScanPage() {
   /**
    * Looks up whatever was scanned.
    *
-   * This screen deliberately accepts any symbol. If it carries an IMEI we
-   * identify the exact handset; otherwise we search the code as a serial
+   * This screen deliberately accepts any symbol. A printed unit label or an
+   * IMEI identifies the exact handset; anything else is searched as a serial
    * number, product or SKU — which is genuinely useful, and means the scanner
-   * can always be tested with whatever barcode is to hand. Receiving and
-   * selling still insist on an IMEI, where being wrong costs something.
+   * can always be tested with whatever barcode is to hand.
    */
   const lookup = async (value: string, raw?: string) => {
     const payload = (raw ?? value).trim();
-    setOutcome({ kind: 'accepted', imei: value });
+    setOutcome({ kind: 'accepted', code: value });
     setBusy(true);
     setResult(null);
     setMatches(null);
     setScanned(payload);
 
-    const imei = extractImei(payload);
+    const classified = classifyBarcode(payload);
     try {
-      if (imei) {
-        setResult(await api.post<VerifyResponse>('/imeis/verify', { imei }));
+      // verify resolves an IMEI or one of our own unit labels; anything else
+      // is worth searching for rather than refusing outright.
+      if (classified.kind === 'IMEI' || classified.kind === 'LABEL') {
+        setResult(await api.post<VerifyResponse>('/imeis/verify', { imei: payload.trim() }));
         return;
       }
       // Not an IMEI — look for it as a serial, product or SKU instead.
@@ -104,9 +105,9 @@ export default function ScanPage() {
 
       <Card>
         <CardContent className="space-y-4 p-4 sm:p-5">
-          <ScanInput onScan={lookup} outcome={outcome} label={t('scan.anyBarcode')} />
-          {/* Anything goes here: IMEI, serial, product code. */}
-          <CameraScanner onDetect={lookup} />
+          {/* Anything goes here: a printed unit label, an IMEI, a serial or
+              a product barcode — by gun, by camera, or typed by hand. */}
+          <CodeScanInput onScan={lookup} outcome={outcome} label={t('scan.anyBarcode')} />
         </CardContent>
       </Card>
 
@@ -173,7 +174,7 @@ function LookupResult({ result, onOpen }: { result: VerifyResponse; onOpen: () =
           <XCircle className="mt-0.5 h-6 w-6 shrink-0 text-destructive" aria-hidden />
           <div>
             <p className="font-semibold">{t('scan.notFound')}</p>
-            <p className="tabular text-sm text-muted-foreground">{formatImei(result.imei)}</p>
+            <p className="tabular text-sm text-muted-foreground">{formatScanCode(result.imei)}</p>
             <p className="mt-1 text-sm text-muted-foreground">
               {result.message ?? t('scan.unknownImei')}
             </p>
@@ -195,7 +196,10 @@ function LookupResult({ result, onOpen }: { result: VerifyResponse; onOpen: () =
           )}
           <div className="min-w-0 flex-1">
             <p className="font-semibold leading-snug">{device.product.name}</p>
-            <p className="tabular text-sm text-muted-foreground">{formatImei(device.imei)}</p>
+            {/* A label-received phone has no IMEI — show the code that found it. */}
+            <p className="tabular text-sm text-muted-foreground">
+              {device.imei ? formatImei(device.imei) : formatScanCode(result.imei)}
+            </p>
           </div>
           <StatusBadge status={device.status} />
         </div>

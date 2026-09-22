@@ -11,9 +11,10 @@ import {
 import { AuditAction, ErrorCode, add, multiply, subtract } from '@phone-erp/shared-types';
 import { AuditService } from '../audit/audit.service';
 import { BusinessError } from '../common/errors/business.error';
-import { normalizeSingleImei } from '../common/pipes/imei.util';
+import { scanCode } from '../common/pipes/imei.util';
 import { DocumentNumberService } from '../common/services/document-number.service';
 import { MovementService } from '../common/services/movement.service';
+import { DeviceScanService } from '../common/services/device-scan.service';
 import { WarehouseAccessService } from '../common/services/warehouse-access.service';
 import type { RequestUser } from '../common/types';
 import { BASE_CURRENCY, ExchangeRateService } from '../costing/exchange-rate.service';
@@ -41,6 +42,7 @@ export class PosService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: WarehouseAccessService,
+    private readonly deviceScan: DeviceScanService,
     private readonly pricing: PricingService,
     private readonly rates: ExchangeRateService,
     private readonly stock: StockService,
@@ -55,22 +57,28 @@ export class PosService {
    */
   async lookup(user: RequestUser, rawImei: string, warehouseId?: string) {
     const shopId = this.access.resolveWarehouseId(user, warehouseId);
-    const imei = normalizeSingleImei(rawImei, false);
+    // The counter scans whatever is on the box: a legacy IMEI, or the unit
+    // label a label-received phone carries instead of one. `imei` in the
+    // response is the code that was scanned, which is what the till echoes.
+    const imei = scanCode(rawImei);
+    const hit = await this.deviceScan.resolveOne(imei);
 
-    const device = await this.prisma.device.findUnique({
-      where: { imei },
-      select: {
-        id: true,
-        imei: true,
-        status: true,
-        currentWarehouseId: true,
-        landedCost: true,
-        product: { select: { id: true, name: true, sku: true } },
-        currentWarehouse: { select: { id: true, name: true } },
-      },
-    });
+    const device = hit
+      ? await this.prisma.device.findUnique({
+          where: { id: hit.device.id },
+          select: {
+            id: true,
+            imei: true,
+            status: true,
+            currentWarehouseId: true,
+            landedCost: true,
+            product: { select: { id: true, name: true, sku: true } },
+            currentWarehouse: { select: { id: true, name: true } },
+          },
+        })
+      : null;
     if (!device) {
-      return { imei, sellable: false, code: ErrorCode.IMEI_NOT_FOUND, message: 'Unknown IMEI.' };
+      return { imei, sellable: false, code: ErrorCode.IMEI_NOT_FOUND, message: 'Unknown code.' };
     }
     if (device.currentWarehouseId !== shopId) {
       return {
@@ -165,7 +173,10 @@ export class PosService {
       throw new BusinessError(ErrorCode.VALIDATION_FAILED, 'Scan a phone or add an accessory first.');
     }
 
-    const imeis = posLines.map((l) => normalizeSingleImei(l.imei, false));
+    // Each entry is whatever was scanned — a legacy IMEI or a printed unit
+    // label. The wire field stays `imei`, as it does on a transfer line, and
+    // holds the code that actually identified the phone.
+    const imeis = posLines.map((l) => scanCode(l.imei));
     if (new Set(imeis).size !== imeis.length) {
       throw new BusinessError(ErrorCode.IMEI_DUPLICATE_IN_REQUEST, 'The same phone was scanned twice.');
     }
@@ -193,8 +204,16 @@ export class PosService {
       this.stock.assertTracking(product, TrackingMode.BULK);
     }
 
+    const { resolved, missing } = await this.deviceScan.resolve(imeis);
+    if (missing.length > 0) {
+      throw new BusinessError(ErrorCode.IMEI_NOT_FOUND, `${missing.length} code(s) are unknown.`, 404, {
+        imeis: missing.slice(0, 20),
+      });
+    }
+
+    const codeByDeviceId = new Map(resolved.map((r) => [r.device.id, r.code]));
     const devices = await this.prisma.device.findMany({
-      where: { imei: { in: imeis } },
+      where: { id: { in: resolved.map((r) => r.device.id) } },
       select: {
         id: true,
         imei: true,
@@ -204,21 +223,17 @@ export class PosService {
         landedCost: true,
       },
     });
-    const byImei = new Map(devices.map((d) => [d.imei, d]));
+    /** Keyed by what was scanned, so every later lookup uses the same handle. */
+    const byImei = new Map(devices.map((d) => [codeByDeviceId.get(d.id)!, d]));
+    const codeOf = (device: { id: string }) => codeByDeviceId.get(device.id)!;
 
-    const unknown = imeis.filter((i) => !byImei.has(i));
-    if (unknown.length > 0) {
-      throw new BusinessError(ErrorCode.IMEI_NOT_FOUND, `${unknown.length} IMEI(s) are unknown.`, 404, {
-        imeis: unknown.slice(0, 20),
-      });
-    }
     const elsewhere = devices.filter((d) => d.currentWarehouseId !== shopId);
     if (elsewhere.length > 0) {
       throw new BusinessError(
         ErrorCode.IMEI_WRONG_WAREHOUSE,
         `${elsewhere.length} phone(s) are not in this shop.`,
         400,
-        { imeis: elsewhere.slice(0, 20).map((d) => d.imei) },
+        { imeis: elsewhere.slice(0, 20).map(codeOf) },
       );
     }
     const sold = devices.filter((d) => d.status === DeviceStatus.SOLD);
@@ -226,7 +241,7 @@ export class PosService {
       throw BusinessError.conflict(
         ErrorCode.IMEI_ALREADY_SOLD,
         `${sold.length} phone(s) have already been sold.`,
-        { imeis: sold.slice(0, 20).map((d) => d.imei) },
+        { imeis: sold.slice(0, 20).map(codeOf) },
       );
     }
     const unavailable = devices.filter((d) => d.status !== DeviceStatus.IN_STOCK);
@@ -235,7 +250,7 @@ export class PosService {
         ErrorCode.IMEI_NOT_AVAILABLE,
         `${unavailable.length} phone(s) are not available to sell.`,
         400,
-        { imeis: unavailable.slice(0, 20).map((d) => ({ imei: d.imei, status: d.status })) },
+        { imeis: unavailable.slice(0, 20).map((d) => ({ imei: codeOf(d), status: d.status })) },
       );
     }
     const packed = await this.prisma.transferDevice.findMany({
@@ -259,7 +274,7 @@ export class PosService {
     const priceByImei = new Map<string, string>();
     const currencies = new Set<Currency>();
     for (const line of posLines) {
-      const imei = normalizeSingleImei(line.imei, false);
+      const imei = scanCode(line.imei);
       const device = byImei.get(imei)!;
       const resolved = await this.pricing.priceForWarehouse(device.productId, shopId);
       currencies.add(resolved.currency);

@@ -12,9 +12,10 @@ import { AuditAction, ErrorCode, add, multiply } from '@phone-erp/shared-types';
 import { AuditService } from '../audit/audit.service';
 import { paginate } from '../common/dto/pagination.dto';
 import { BusinessError } from '../common/errors/business.error';
-import { normalizeImeiBatch } from '../common/pipes/imei.util';
+import { normalizeScanCodes } from '../common/pipes/imei.util';
 import { DocumentNumberService } from '../common/services/document-number.service';
 import { MovementService } from '../common/services/movement.service';
+import { DeviceScanService } from '../common/services/device-scan.service';
 import { WarehouseAccessService } from '../common/services/warehouse-access.service';
 import { APP_CONFIG } from '../common/tokens';
 import type { RequestUser } from '../common/types';
@@ -41,6 +42,7 @@ export class SalesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: WarehouseAccessService,
+    private readonly deviceScan: DeviceScanService,
     private readonly numbers: DocumentNumberService,
     private readonly movements: MovementService,
     private readonly audit: AuditService,
@@ -126,6 +128,9 @@ export class SalesService {
         id: true,
         imei: true,
         status: true,
+        // A label-received phone has no IMEI; its printed label is the only
+        // thing to show on the line, and the only way to open its history.
+        label: { select: { code: true } },
         product: { select: { id: true, name: true, sku: true } },
       },
     });
@@ -444,10 +449,20 @@ export class SalesService {
     sale: Prisma.SaleGetPayload<{ include: { items: true } }>,
     rawImeis: string[],
   ) {
-    const imeis = normalizeImeiBatch(rawImeis, this.config.imei.enforceChecksum);
+    // Whatever was scanned — a legacy IMEI or a printed unit label — stands
+    // for one device. Errors below name the code that was actually scanned,
+    // since a label-received phone has no IMEI to quote back.
+    const codes = normalizeScanCodes(rawImeis);
+    const { resolved, missing } = await this.deviceScan.resolve(codes);
+    if (missing.length > 0) {
+      throw new BusinessError(ErrorCode.IMEI_NOT_FOUND, `${missing.length} code(s) are unknown.`, 404, {
+        imeis: missing.slice(0, 20),
+      });
+    }
 
+    const codeByDeviceId = new Map(resolved.map((r) => [r.device.id, r.code]));
     const devices = await this.prisma.device.findMany({
-      where: { imei: { in: imeis } },
+      where: { id: { in: resolved.map((r) => r.device.id) } },
       select: {
         id: true,
         imei: true,
@@ -457,21 +472,15 @@ export class SalesService {
         landedCost: true,
       },
     });
-    const byImei = new Map(devices.map((d) => [d.imei, d]));
-
-    const unknown = imeis.filter((i) => !byImei.has(i));
-    if (unknown.length > 0) {
-      throw new BusinessError(ErrorCode.IMEI_NOT_FOUND, `${unknown.length} IMEI(s) are unknown.`, 404, {
-        imeis: unknown.slice(0, 20),
-      });
-    }
+    /** What the picker scanned for this device, for any message about it. */
+    const codeOf = (device: { id: string }) => codeByDeviceId.get(device.id)!;
 
     const alreadySold = devices.filter((d) => d.status === DeviceStatus.SOLD);
     if (alreadySold.length > 0) {
       throw BusinessError.conflict(
         ErrorCode.IMEI_ALREADY_SOLD,
         `${alreadySold.length} phone(s) have already been sold.`,
-        { imeis: alreadySold.slice(0, 20).map((d) => d.imei) },
+        { imeis: alreadySold.slice(0, 20).map(codeOf) },
       );
     }
 
@@ -481,7 +490,7 @@ export class SalesService {
         ErrorCode.IMEI_WRONG_WAREHOUSE,
         `${elsewhere.length} phone(s) do not belong to this warehouse.`,
         400,
-        { imeis: elsewhere.slice(0, 20).map((d) => d.imei) },
+        { imeis: elsewhere.slice(0, 20).map(codeOf) },
       );
     }
 
@@ -491,7 +500,7 @@ export class SalesService {
         ErrorCode.IMEI_NOT_AVAILABLE,
         `${unavailable.length} phone(s) are not available for sale.`,
         400,
-        { imeis: unavailable.slice(0, 20).map((d) => ({ imei: d.imei, status: d.status })) },
+        { imeis: unavailable.slice(0, 20).map((d) => ({ imei: codeOf(d), status: d.status })) },
       );
     }
 

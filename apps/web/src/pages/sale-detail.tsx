@@ -7,10 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ErrorState, FormError, LoadingState } from '@/components/ui/states';
 import { TableWrap, Td, Th, Tr } from '@/components/ui/table';
 import { useToast } from '@/components/ui/toast';
-import { CameraScanner } from '@/features/scanner/camera-scanner';
-import { ScanInput } from '@/features/scanner/scan-input';
-import { ScanList, ScanProgress } from '@/features/scanner/scan-list';
-import { useScanBuffer } from '@/features/scanner/use-scan-buffer';
+import { CodeList } from '@/features/scanner/code-list';
+import { CodeScanInput } from '@/features/scanner/code-scan-input';
+import { ScanProgress } from '@/features/scanner/scan-list';
+import { useCodeBuffer } from '@/features/scanner/use-code-buffer';
 import { useApiMutation, useApiQuery } from '@/hooks/use-api';
 import { useI18n } from '@/i18n/provider';
 import { api } from '@/lib/api';
@@ -36,7 +36,14 @@ interface SaleDetail {
     totalPrice: string;
     product: { id: string; name: string; sku: string };
   }[];
-  devices: { id: string; imei: string; status: string; product: { name: string } }[];
+  devices: {
+    id: string;
+    /** Null on a phone received by label, which never had one. */
+    imei: string | null;
+    label: { code: string } | null;
+    status: string;
+    product: { name: string };
+  }[];
 }
 
 export default function SaleDetailPage() {
@@ -128,8 +135,13 @@ export default function SaleDetailPage() {
             <ul className="max-h-96 divide-y overflow-y-auto rounded-md border">
               {sale.devices.map((device) => (
                 <li key={device.id} className="flex items-center gap-3 px-3 py-2.5">
-                  <Link to={`/imei/${device.imei}`} className="tabular flex-1 truncate font-medium hover:underline">
-                    {formatImei(device.imei)}
+                  {/* Either handle opens the history; only an IMEI gets the
+                      grouped-digits treatment, a label reads as printed. */}
+                  <Link
+                    to={`/imei/${encodeURIComponent(device.imei ?? device.label?.code ?? '')}`}
+                    className="tabular flex-1 truncate font-medium hover:underline"
+                  >
+                    {device.imei ? formatImei(device.imei) : (device.label?.code ?? '—')}
                   </Link>
                   <StatusBadge status={device.status} />
                 </li>
@@ -158,7 +170,7 @@ function PickAndShip({
 }) {
   const { t } = useI18n();
   const toast = useToast();
-  const buffer = useScanBuffer({ expected: outstanding });
+  const buffer = useCodeBuffer({ expected: outstanding });
   const [confirmingAuto, setConfirmingAuto] = useState(false);
   const over = buffer.count > outstanding;
 
@@ -187,8 +199,7 @@ function PickAndShip({
       <CardContent className="space-y-4">
         <ScanProgress expected={outstanding} scanned={buffer.count} />
 
-        <ScanInput onScan={(imei) => buffer.add(imei)} outcome={buffer.lastOutcome} disabled={over} />
-        <CameraScanner onDetect={(imei) => buffer.add(imei)} />
+        <CodeScanInput onScan={(code) => buffer.add(code)} outcome={buffer.lastOutcome} disabled={over} />
 
         {over && (
           <div
@@ -199,7 +210,7 @@ function PickAndShip({
           </div>
         )}
 
-        <ScanList entries={buffer.entries} onRemove={buffer.remove} />
+        <CodeList entries={buffer.entries} onRemove={buffer.remove} />
 
         <FormError error={complete.error} />
 
@@ -208,7 +219,7 @@ function PickAndShip({
           variant={buffer.count === outstanding ? 'success' : 'default'}
           className="w-full"
           disabled={buffer.count !== outstanding || complete.isPending}
-          onClick={() => complete.mutate({ imeis: buffer.imeis }, { onSuccess, onError })}
+          onClick={() => complete.mutate({ imeis: buffer.codes }, { onSuccess, onError })}
         >
           {complete.isPending
             ? t('sale.completing')
