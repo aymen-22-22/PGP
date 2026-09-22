@@ -109,6 +109,13 @@ export class ReceivePurchaseDto {
   allowPartial?: boolean;
 }
 
+export class ReceiveByLabelDto {
+  @ApiProperty({ example: 'UL-2026-000123', description: 'The code scanned off the printed label' })
+  @IsString()
+  @MaxLength(40)
+  code!: string;
+}
+
 export class QueryPurchasesDto extends PaginationQueryDto {
   @ApiPropertyOptional({ enum: PurchaseStatus })
   @IsOptional()

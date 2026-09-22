@@ -13,7 +13,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AdminOnly } from '../common/decorators/roles.decorator';
 import type { RequestUser } from '../common/types';
-import { CreatePurchaseDto, QueryPurchasesDto, ReceivePurchaseDto } from './dto/purchase.dto';
+import { CreatePurchaseDto, QueryPurchasesDto, ReceiveByLabelDto, ReceivePurchaseDto } from './dto/purchase.dto';
 import { PurchasesService } from './purchases.service';
 
 @ApiTags('Purchases')
@@ -53,6 +53,20 @@ export class PurchasesController {
     @Body() dto: ReceivePurchaseDto,
   ) {
     return this.purchases.receive(user, id, dto);
+  }
+
+  @Post(':id/receive-by-label')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Register one phone into stock by scanning its printed label',
+    description: 'No IMEI required — the label already proves the product and the purchase order.',
+  })
+  receiveByLabel(
+    @CurrentUser() user: RequestUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ReceiveByLabelDto,
+  ) {
+    return this.purchases.receiveByLabel(user, id, dto);
   }
 
   @Post(':id/labels')

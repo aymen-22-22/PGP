@@ -257,17 +257,18 @@ model User {
   auditLogs         AuditLog[]
   movements         DeviceMovement[]
   stockMovements    StockMovement[]
-  purchasesCreated  Purchase[]       @relation("PurchaseCreatedBy")
-  transfersCreated  Transfer[]       @relation("TransferCreatedBy")
-  salesCreated      Sale[]           @relation("SaleCreatedBy")
-  returnsCreated    Return[]         @relation("ReturnCreatedBy")
-  shipmentsShipped  Shipment[]       @relation("ShipmentShippedBy")
-  shipmentsReceived Shipment[]       @relation("ShipmentReceivedBy")
-  receiptsCreated   Receipt[]        @relation("ReceiptCreatedBy")
-  receiptsValidated Receipt[]        @relation("ReceiptValidatedBy")
-  costDocsCreated   CostDocument[]   @relation("CostDocumentCreatedBy")
-  costDocsPosted    CostDocument[]   @relation("CostDocumentPostedBy")
-  pricesCreated     ProductPrice[]   @relation("ProductPriceCreatedBy")
+  purchasesCreated  Purchase[]          @relation("PurchaseCreatedBy")
+  transfersCreated  Transfer[]          @relation("TransferCreatedBy")
+  salesCreated      Sale[]              @relation("SaleCreatedBy")
+  returnsCreated    Return[]            @relation("ReturnCreatedBy")
+  shipmentsShipped  Shipment[]          @relation("ShipmentShippedBy")
+  shipmentsReceived Shipment[]          @relation("ShipmentReceivedBy")
+  receiptsCreated   Receipt[]           @relation("ReceiptCreatedBy")
+  receiptsValidated Receipt[]           @relation("ReceiptValidatedBy")
+  costDocsCreated   CostDocument[]      @relation("CostDocumentCreatedBy")
+  costDocsPosted    CostDocument[]      @relation("CostDocumentPostedBy")
+  pricesCreated     ProductPrice[]      @relation("ProductPriceCreatedBy")
+  labelsReceived    PurchaseUnitLabel[]
 
   @@index([warehouseId])
   @@index([isActive])
@@ -417,12 +418,15 @@ model Device {
   sale             Sale?         @relation(fields: [saleId], references: [id], onDelete: SetNull)
   saleItem         SaleItem?     @relation(fields: [saleItemId], references: [id], onDelete: SetNull)
 
-  lot           Lot?             @relation(fields: [lotId], references: [id], onDelete: SetNull)
+  lot           Lot?               @relation(fields: [lotId], references: [id], onDelete: SetNull)
   movements     DeviceMovement[]
   transferLines TransferDevice[]
   returnItems   ReturnItem[]
   receiptLines  ReceiptLine[]
   costEntries   CostEntry[]
+  /// The label scanned at goods-in that became this device, if it arrived
+  /// through the label-first workflow rather than a bulk IMEI/serial receipt.
+  label         PurchaseUnitLabel?
 
   @@index([productId])
   @@index([status])
@@ -527,12 +531,20 @@ model PurchaseUnitLabel {
   /// 1..quantity within its line, so a printed sheet can read "3 of 10".
   sequence       Int
   printedAt      DateTime?
+  /// Set once this label is scanned at goods-in — the device it became, who
+  /// scanned it, and when. Null means the phone has not arrived yet.
+  deviceId       String?   @unique
+  receivedAt     DateTime?
+  receivedById   String?
   createdAt      DateTime  @default(now())
 
   purchaseItem PurchaseItem @relation(fields: [purchaseItemId], references: [id], onDelete: Cascade)
+  device       Device?      @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  receivedBy   User?        @relation(fields: [receivedById], references: [id], onDelete: SetNull)
 
   @@unique([purchaseItemId, sequence])
   @@index([purchaseItemId])
+  @@index([receivedById])
 }
 
 /// A receiving event: purchase goods-in, or transfer goods-in at destination.
