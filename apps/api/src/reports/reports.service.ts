@@ -36,7 +36,18 @@ export class ReportsService {
     const deviceScope: Prisma.DeviceWhereInput = scopeId ? { currentWarehouseId: scopeId } : {};
     const saleScope: Prisma.SaleWhereInput = scope.completedSales;
 
-    const [byStatus, salesAgg, stockValue, bulkLevels, inTransit, incoming, outgoing, byWarehouse, openPurchases] =
+    const [
+      byStatus,
+      salesAgg,
+      stockValue,
+      bulkLevels,
+      inTransit,
+      incoming,
+      outgoing,
+      openTransfers,
+      byWarehouse,
+      openPurchases,
+    ] =
       await Promise.all([
         this.prisma.device.groupBy({
           by: ['status'],
@@ -83,6 +94,14 @@ export class ReportsService {
               status: TransferStatus.IN_TRANSIT,
               ...(scopeId ? { sourceWarehouseId: scopeId } : {}),
             },
+          },
+        }),
+        // Transfers still to be received here — documents, not units, because
+        // that is what the Receive page lists and the dashboard card counts.
+        this.prisma.transfer.count({
+          where: {
+            status: TransferStatus.IN_TRANSIT,
+            ...(scopeId ? { destinationWarehouseId: scopeId } : {}),
           },
         }),
         isAdmin && !warehouseId ? this.warehouseBreakdown() : Promise.resolve([]),
@@ -140,7 +159,17 @@ export class ReportsService {
         currency: Currency.EUR,
         completedSales: salesAgg._count._all,
       },
-      movement: { inTransit, incoming, outgoing, openPurchases },
+      movement: {
+        inTransit,
+        incoming,
+        outgoing,
+        openPurchases,
+        openTransfers,
+        // What the Receive page actually has waiting: outstanding purchase
+        // orders plus shipments in from other warehouses. `incoming` counts
+        // transfer units alone, so the card read 0 with a full loading bay.
+        pendingReceipts: openPurchases + openTransfers,
+      },
       byWarehouse,
     };
   }

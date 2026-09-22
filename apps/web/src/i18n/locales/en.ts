@@ -591,6 +591,7 @@ const en = {
   'stock.corrected': 'Stock corrected by {delta}.',
   'stock.oneWarehouse': 'Everything in your warehouse.',
   'stock.manyWarehouses': '{count} warehouses, worth {value} in total.',
+  'stock.manyWarehousesPlain': '{count} warehouses.',
   'stock.noWarehouse.title': 'No warehouse assigned',
   'stock.noWarehouse.body':
     'Your account is not attached to a warehouse yet. An administrator can set that on your user.',

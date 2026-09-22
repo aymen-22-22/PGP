@@ -25,7 +25,15 @@ export interface Dashboard {
     currency: Currency;
     completedSales: number;
   };
-  movement: { inTransit: number; incoming: number; outgoing: number; openPurchases: number };
+  movement: {
+    inTransit: number;
+    incoming: number;
+    outgoing: number;
+    openPurchases: number;
+    openTransfers: number;
+    /** Outstanding purchase orders plus shipments in — what Receive lists. */
+    pendingReceipts: number;
+  };
   byWarehouse: {
     warehouseId: string;
     warehouseName: string;

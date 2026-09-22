@@ -5,10 +5,13 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import type { BrandStockCards } from '@phone-erp/shared-types';
 import { useI18n } from '@/i18n/provider';
 import { useApiQuery } from '@/hooks/use-api';
+import { isAdmin, useAuth } from '@/lib/auth';
 
 
 /** Which makes are in this building. */
 export default function StockCategoriesPage() {
+  // Stock value is office information; the floor sees quantities.
+  const showMoney = isAdmin(useAuth((s) => s.user));
   const { t, money, n } = useI18n();
   const { warehouseId } = useParams<{ warehouseId: string }>();
   const query = useApiQuery<BrandStockCards>(`/stock-explorer/warehouses/${warehouseId}/categories`);
@@ -34,7 +37,7 @@ export default function StockCategoriesPage() {
         <h1 className="text-2xl font-bold tracking-tight">{warehouse.name}</h1>
         <p className="text-sm text-muted-foreground">
           <span className="tabular">{warehouse.code}</span> · {t('stock.brands', { count: data.length })} ·{' '}
-          {t('stock.onShelfValue', { value: money(total.toFixed(2)) })}
+          {showMoney ? t('stock.onShelfValue', { value: money(total.toFixed(2)) }) : ''}
         </p>
       </header>
 
@@ -69,12 +72,14 @@ export default function StockCategoriesPage() {
               <dl className="space-y-1 text-sm">
                 <Row label={t('common.products')} value={n(category.products)} />
                 <Row label={t('common.quantity')} value={n(category.quantity)} />
-                <div className="flex items-center justify-between border-t pt-1">
-                  <dt className="text-muted-foreground">{t('stock.value')}</dt>
-                  <dd className="tabular font-bold text-success">
-                    {money(category.stockValue, category.currency, { round: true })}
-                  </dd>
-                </div>
+                {showMoney && (
+                  <div className="flex items-center justify-between border-t pt-1">
+                    <dt className="text-muted-foreground">{t('stock.value')}</dt>
+                    <dd className="tabular font-bold text-success">
+                      {money(category.stockValue, category.currency, { round: true })}
+                    </dd>
+                  </div>
+                )}
               </dl>
             </div>
           </Link>

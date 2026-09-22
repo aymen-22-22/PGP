@@ -139,7 +139,7 @@ export default function HomePage() {
         />
         <Stat
           label={t('home.receive')}
-          value={movement.incoming}
+          value={movement.pendingReceipts}
           tone="warning"
           icon={ArrowDownToLine}
           sub={t('home.receiveSub')}
@@ -232,7 +232,7 @@ export default function HomePage() {
             <Button asChild variant="outline" size="lg" className="justify-between">
               <Link to="/receive">
                 {t('home.incomingShipments')}
-                <span className="tabular font-bold">{formatNumber(movement.incoming)}</span>
+                <span className="tabular font-bold">{formatNumber(movement.pendingReceipts)}</span>
               </Link>
             </Button>
             <Button asChild variant="outline" size="lg" className="justify-between">

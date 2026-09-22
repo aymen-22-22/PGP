@@ -585,6 +585,7 @@ const fr: Record<string, string> = {
   'stock.corrected': 'Stock corrigé de {delta}.',
   'stock.oneWarehouse': 'Tout ce que contient votre entrepôt.',
   'stock.manyWarehouses': '{count} entrepôts, pour une valeur totale de {value}.',
+  'stock.manyWarehousesPlain': '{count} entrepôts.',
   'stock.noWarehouse.title': 'Aucun entrepôt attribué',
   'stock.noWarehouse.body':
     'Votre compte n’est rattaché à aucun entrepôt. Un administrateur peut le faire depuis votre fiche utilisateur.',

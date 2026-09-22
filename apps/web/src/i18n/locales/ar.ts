@@ -712,6 +712,7 @@ const ar: Record<string, string> = {
   'stock.corrected': 'صحّح المخزون بمقدار {delta}.',
   'stock.oneWarehouse': 'كل ما في مستودعك.',
   'stock.manyWarehouses': '{count} مستودعات، بقيمة إجمالية {value}.',
+  'stock.manyWarehousesPlain': '{count} مستودعات.',
   'stock.noWarehouse.title': 'لم يُسنَد أي مستودع',
   'stock.noWarehouse.body':
     'حسابك غير مرتبط بأي مستودع بعد. يمكن للمسؤول ضبط ذلك من صفحة المستخدم.',
