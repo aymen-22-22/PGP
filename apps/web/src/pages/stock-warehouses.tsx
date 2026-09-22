@@ -7,6 +7,7 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import type { Listed, WarehouseStockCard } from '@phone-erp/shared-types';
 import { useI18n } from '@/i18n/provider';
 import { useApiQuery } from '@/hooks/use-api';
+import { isAdmin, useAuth } from '@/lib/auth';
 
 
 /** A flag for the country, which reads faster than the country's name. */
@@ -19,6 +20,8 @@ const FLAGS: Record<string, string> = { FR: '🇫🇷', ES: '🇪🇸', DZ: '�
  * not open is never sent, rather than sent and hidden.
  */
 export default function StockWarehousesPage() {
+  // Stock value is office information; the floor sees quantities.
+  const showMoney = isAdmin(useAuth((s) => s.user));
   const { t, money, n } = useI18n();
   const query = useApiQuery<Listed<WarehouseStockCard>>('/stock-explorer/warehouses');
 
@@ -35,11 +38,13 @@ export default function StockWarehousesPage() {
         description={
           warehouses.length === 1
             ? t('stock.oneWarehouse')
-            : t('stock.manyWarehouses', { count: warehouses.length, value: money(total.toFixed(2)) })
+            : showMoney
+              ? t('stock.manyWarehouses', { count: warehouses.length, value: money(total.toFixed(2)) })
+              : t('stock.manyWarehousesPlain', { count: warehouses.length })
         }
         action={
           <Button asChild variant="outline">
-            <Link to="/stock/search">{t('stock.findOne')}</Link>
+            <Link to="/scan">{t('stock.findOne')}</Link>
           </Button>
         }
       />
@@ -93,12 +98,14 @@ export default function StockWarehousesPage() {
               <Figure icon={Package} label={t('common.products')} value={n(warehouse.products)} />
               <Figure icon={Layers} label={t('stock.card.brands')} value={n(warehouse.categories)} />
               <Figure icon={Boxes} label={t('common.quantity')} value={n(warehouse.quantity)} />
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-muted-foreground">{t('stock.stockValue')}</dt>
-                <dd className="tabular font-bold text-success">
-                  {money(warehouse.stockValue, warehouse.currency, { round: true })}
-                </dd>
-              </div>
+              {showMoney && (
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-muted-foreground">{t('stock.stockValue')}</dt>
+                  <dd className="tabular font-bold text-success">
+                    {money(warehouse.stockValue, warehouse.currency, { round: true })}
+                  </dd>
+                </div>
+              )}
             </dl>
 
             <div className="mt-auto flex items-center justify-between border-t pt-3">

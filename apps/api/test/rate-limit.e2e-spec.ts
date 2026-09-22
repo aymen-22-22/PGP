@@ -1,55 +1,66 @@
 import { INestApplication } from '@nestjs/common';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { Fixture, as, createTestApp, login, seedFixture } from './helpers';
+import request from 'supertest';
 
 /**
- * Rate limiting counts per account, not per address.
+ * A signed-in account is never rate limited; login still is.
  *
- * A warehouse is one internet connection: keyed on IP, one picker working a
- * pallet used up the bucket for the whole building, office and till included.
- * Every request in this suite comes from the same address, which is exactly
- * the situation that used to collapse them all together.
+ * Throttling authenticated traffic cost more than it bought — a picker
+ * working a pallet, or several staff behind one connection, hit the ceiling
+ * doing their job and the site stopped answering. Login keeps its own strict
+ * bucket, because that one guards a password and anyone can knock on it.
  */
 describe('Rate limiting', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let fixture: Fixture;
   let admin: string;
-  let jean: string;
-  let previousLimit: string | undefined;
+  const previous: Record<string, string | undefined> = {};
 
   beforeAll(async () => {
-    // The suite-wide limit is enormous so nothing else trips over it; this
-    // spec needs a ceiling it can actually reach.
-    previousLimit = process.env.THROTTLE_LIMIT;
-    process.env.THROTTLE_LIMIT = '8';
+    // The suite-wide limits are enormous so nothing trips over them; this spec
+    // needs ceilings it can actually reach.
+    previous.limit = process.env.THROTTLE_LIMIT;
+    previous.login = process.env.THROTTLE_LOGIN_LIMIT;
+    process.env.THROTTLE_LIMIT = '5';
+    process.env.THROTTLE_LOGIN_LIMIT = '3';
     ({ app, prisma } = await createTestApp());
   });
   beforeEach(async () => {
     await prisma.truncateAll();
     fixture = await seedFixture(prisma);
     admin = await login(app, fixture.admin.email);
-    jean = await login(app, fixture.jean.email);
   });
   afterAll(async () => {
     await app.close();
-    if (previousLimit === undefined) delete process.env.THROTTLE_LIMIT;
-    else process.env.THROTTLE_LIMIT = previousLimit;
+    for (const [key, name] of [
+      ['limit', 'THROTTLE_LIMIT'],
+      ['login', 'THROTTLE_LOGIN_LIMIT'],
+    ] as const) {
+      if (previous[key] === undefined) delete process.env[name];
+      else process.env[name] = previous[key]!;
+    }
   });
 
-  it('does not let one account exhaust the bucket for another', async () => {
-    // Spend the admin's allowance well past the limit.
+  it('never throttles a signed-in account, however hard it works', async () => {
+    // Well past a limit of 5: a pallet is hundreds of scans in a few minutes.
+    for (let i = 0; i < 30; i += 1) {
+      await as(app, admin).get('/api/v1/warehouses').expect(200);
+    }
+  });
+
+  it('still throttles repeated login attempts', async () => {
     let throttled = false;
-    for (let i = 0; i < 20; i += 1) {
-      const res = await as(app, admin).get('/api/v1/warehouses');
+    for (let i = 0; i < 12; i += 1) {
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/auth/login')
+        .send({ email: fixture.admin.email, password: 'WrongPassword123!' });
       if (res.status === 429) {
         throttled = true;
         break;
       }
     }
     expect(throttled).toBe(true);
-
-    // Same machine, same address, different person: still working.
-    await as(app, jean).get('/api/v1/warehouses').expect(200);
   });
 });

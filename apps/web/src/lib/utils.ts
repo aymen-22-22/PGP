@@ -50,7 +50,15 @@ export function formatDateTime(value: string | Date | null | undefined): string 
 }
 
 /** "356789012345678" → "35678901 2345678", easier to read back off a screen. */
-export function formatImei(imei: string): string {
+/**
+ * Groups an IMEI's digits for reading, and tolerates not being given one.
+ *
+ * Since stock can arrive by label, `Device.imei` is genuinely nullable and
+ * several screens pass it straight through — one of them crashed the whole
+ * product page on `null.length`. Anything unreadable comes back as a dash.
+ */
+export function formatImei(imei: string | null | undefined): string {
+  if (!imei) return '—';
   return imei.length === 15 ? `${imei.slice(0, 8)} ${imei.slice(8)}` : imei;
 }
 

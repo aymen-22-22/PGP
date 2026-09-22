@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ExecutionContext, Injectable } from '@nestjs/common';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import type { RequestUser } from '../types';
 
@@ -19,6 +19,25 @@ import type { RequestUser } from '../types';
  */
 @Injectable()
 export class UserThrottlerGuard extends ThrottlerGuard {
+  /**
+   * A signed-in account is never rate limited.
+   *
+   * Throttling authenticated traffic was costing more than it bought: a
+   * picker working a pallet, or several staff on one connection, hit the
+   * ceiling doing their job and the site simply stopped answering them.
+   * Whoever is signed in already passed authentication and is scoped to
+   * their own warehouse, so the protection this offered was slight.
+   *
+   * Login is another matter and keeps its own strict bucket — that one
+   * guards a password, and anyone can knock on it.
+   */
+  protected async shouldSkip(context: ExecutionContext): Promise<boolean> {
+    const { req } = this.getRequestResponse(context);
+    const user = (req as Record<string, unknown>).user as RequestUser | undefined;
+    if (user?.id) return true;
+    return super.shouldSkip(context);
+  }
+
   protected async getTracker(req: Record<string, unknown>): Promise<string> {
     const user = req.user as RequestUser | undefined;
     if (user?.id) return `user:${user.id}`;

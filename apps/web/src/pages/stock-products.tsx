@@ -6,6 +6,7 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
 import type { ProductStockCard, ProductStockCards } from '@phone-erp/shared-types';
 import { useI18n } from '@/i18n/provider';
 import { useApiQuery } from '@/hooks/use-api';
+import { isAdmin, useAuth } from '@/lib/auth';
 import { formatNumber } from '@/lib/utils';
 
 
@@ -18,6 +19,8 @@ export const STOCK_STATUS: Record<ProductStockCard['status'], { label: string; t
 
 /** What is actually on the shelf, in this category, in this warehouse. */
 export default function StockProductsPage() {
+  // Stock value is office information; the floor sees quantities.
+  const showMoney = isAdmin(useAuth((s) => s.user));
   const { t, money } = useI18n();
   const { warehouseId, category } = useParams<{ warehouseId: string; category: string }>();
   const query = useApiQuery<ProductStockCards>(
@@ -48,7 +51,8 @@ export default function StockProductsPage() {
         </nav>
         <h1 className="text-2xl font-bold tracking-tight">{category}</h1>
         <p className="text-sm text-muted-foreground">
-          {t('common.products')} · {data.length} · {t('stock.onShelfValue', { value: money(total.toFixed(2)) })}
+          {t('common.products')} · {data.length}
+          {showMoney && <> · {t('stock.onShelfValue', { value: money(total.toFixed(2)) })}</>}
         </p>
       </header>
 
@@ -89,10 +93,14 @@ export default function StockProductsPage() {
                 </dl>
 
                 <div className="mt-auto flex items-end justify-between gap-2 border-t pt-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">{t('stock.stockValue')}</p>
-                    <p className="tabular font-bold">{money(product.stockValue)}</p>
-                  </div>
+                  {showMoney ? (
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">{t('stock.stockValue')}</p>
+                      <p className="tabular font-bold">{money(product.stockValue)}</p>
+                    </div>
+                  ) : (
+                    <span />
+                  )}
                   <span className={`rounded-md border px-2 py-0.5 text-xs font-medium ${status.tone}`}>
                     {t(status.label)}
                   </span>

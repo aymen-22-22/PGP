@@ -15,6 +15,7 @@ import { TableWrap, Td, Th, Tr } from '@/components/ui/table';
 import type { Product360 } from '@phone-erp/shared-types';
 import { useI18n } from '@/i18n/provider';
 import { useApiQuery } from '@/hooks/use-api';
+import { isAdmin, useAuth } from '@/lib/auth';
 import { formatImei } from '@/lib/utils';
 import { STOCK_STATUS } from './stock-products';
 
@@ -46,6 +47,8 @@ const REFERENCE_LINK: Record<string, (id: string) => string> = {
 export default function StockProduct360Page() {
   const { t, date, dateTime, money, n } = useI18n();
   const { warehouseId, productId } = useParams<{ warehouseId: string; productId: string }>();
+  // What a unit cost and what the shelf is worth is office information.
+  const showMoney = isAdmin(useAuth((s) => s.user));
   const query = useApiQuery<Product360>(
     `/stock-explorer/warehouses/${warehouseId}/products/${productId}`,
   );
@@ -142,11 +145,15 @@ export default function StockProduct360Page() {
           )}
 
           <dl className="grid gap-3 border-t pt-3 text-sm sm:grid-cols-3">
-            <Field label={t('stock.stockValue')} value={money(stock.stockValue, stock.currency)} />
-            <Field
-              label={serialised ? t('stock360.avgLandedCost') : t('stock360.avgUnitCost')}
-              value={money(stock.unitCost, stock.currency)}
-            />
+            {showMoney && (
+              <Field label={t('stock.stockValue')} value={money(stock.stockValue, stock.currency)} />
+            )}
+            {showMoney && (
+              <Field
+                label={serialised ? t('stock360.avgLandedCost') : t('stock360.avgUnitCost')}
+                value={money(stock.unitCost, stock.currency)}
+              />
+            )}
             <Field
               label={t('stock360.sellsFor')}
               value={
@@ -177,29 +184,36 @@ export default function StockProduct360Page() {
           </CardHeader>
           <CardContent>
             <ul className="divide-y rounded-md border">
-              {units.map((unit) => (
+              {units.map((unit) => {
+                // Either handle opens the history; a label-received unit has
+                // only its printed code.
+                const handle = unit.imei ?? unit.label?.code ?? null;
+                return (
                 <li key={unit.id}>
                   <Link
-                    to={`/imei/${unit.imei}`}
+                    to={handle ? `/imei/${encodeURIComponent(handle)}` : '#'}
                     className="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-accent/40"
                   >
-                    <span className="tabular flex-1 truncate font-medium">{formatImei(unit.imei)}</span>
+                    <span className="tabular flex-1 truncate font-medium">{formatImei(handle)}</span>
                     {unit.receivedAt && (
                       <span className="text-xs text-muted-foreground">{date(unit.receivedAt)}</span>
                     )}
-                    <span className="tabular text-sm font-semibold">
-                      {unit.landedCost ? money(unit.landedCost) : '—'}
-                    </span>
+                    {showMoney && (
+                      <span className="tabular text-sm font-semibold">
+                        {unit.landedCost ? money(unit.landedCost) : '—'}
+                      </span>
+                    )}
                   </Link>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           </CardContent>
         </Card>
       )}
 
       {/* ── how it arrived ───────────────────────────────────────────────── */}
-      {purchases.length > 0 && (
+      {showMoney && purchases.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">{t('stock360.howArrived')}</CardTitle>
@@ -248,7 +262,7 @@ export default function StockProduct360Page() {
       )}
 
       {/* ── how it left ──────────────────────────────────────────────────── */}
-      {sales.length > 0 && (
+      {showMoney && sales.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">{t('stock360.howLeft')}</CardTitle>

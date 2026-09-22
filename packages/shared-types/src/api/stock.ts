@@ -99,7 +99,14 @@ export interface Product360 {
     countedAt: string | null;
   };
   sellingPrice: { price: string; currency: string; market: string; since: string } | null;
-  units: { id: string; imei: string; landedCost: string | null; receivedAt: string | null }[];
+  units: {
+    id: string;
+    /** Null on a unit received by label, which never had one. */
+    imei: string | null;
+    label: { code: string } | null;
+    landedCost: string | null;
+    receivedAt: string | null;
+  }[];
   purchases: {
     purchaseId: string;
     number: string;

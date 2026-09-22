@@ -281,7 +281,15 @@ export class StockExplorerService {
         // A sample of the actual units, so the count is not just a number.
         this.prisma.device.findMany({
           where: { ...here, status: DeviceStatus.IN_STOCK },
-          select: { id: true, imei: true, landedCost: true, receivedAt: true },
+          // A label-received unit has no IMEI at all — its printed label is
+          // the only thing that identifies it, on screen and in a link.
+          select: {
+            id: true,
+            imei: true,
+            label: { select: { code: true } },
+            landedCost: true,
+            receivedAt: true,
+          },
           orderBy: { receivedAt: 'desc' },
           take: 10,
         }),
@@ -419,7 +427,11 @@ export class StockExplorerService {
         : null,
       units: recentDevices.map((d) => ({
         id: d.id,
-        imei: d.imei!,
+        // Not `d.imei!`: a label-received unit genuinely has none, and the
+        // assertion sent a null through to the screen, which crashed the
+        // whole product page trying to format it.
+        imei: d.imei,
+        label: d.label ? { code: d.label.code } : null,
         landedCost: d.landedCost?.toFixed(2) ?? null,
         receivedAt: d.receivedAt?.toISOString() ?? null,
       })),
