@@ -1,13 +1,14 @@
-import { Building2, FileClock, KeyRound, LogOut, User, Warehouse } from 'lucide-react';
+import { Building2, FileClock, KeyRound, LogOut, Printer, User, Warehouse } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input, Label } from '@/components/ui/input';
+import { Input, Label, Select } from '@/components/ui/input';
 import { FormError } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { LABEL_SIZES } from '@/lib/label-sizes';
 import { LOCALES, type Locale } from '@/i18n/core';
 import { useI18n, useT } from '@/i18n/provider';
 import { bottomTabsFor, navigationExcluding } from '@/lib/navigation';
@@ -62,6 +63,8 @@ export default function MorePage() {
       <LanguageChoice />
 
       <EmailNotifications />
+
+      <PrinterSettings />
 
       <ChangePassword />
 
@@ -222,6 +225,128 @@ function EmailNotifications() {
         <b>{t('more.notify.label')}</b> {t('more.notify.help')}
       </span>
     </label>
+  );
+}
+
+/**
+ * How this person's own browser gets a unit label to a thermal printer.
+ *
+ * Per-user on purpose: two people sharing a warehouse account might sit at
+ * different benches with different printers, and someone's printer address
+ * is not everyone's business.
+ */
+function PrinterSettings() {
+  const t = useT();
+  const toast = useToast();
+  const user = useAuth((s) => s.user);
+  const setUser = useAuth((s) => s.setUser);
+  const [connectionType, setConnectionType] = useState(user?.printerConnectionType ?? 'BROWSER');
+  const [address, setAddress] = useState(user?.printerAddress ?? '');
+  const [labelSize, setLabelSize] = useState(user?.printerLabelSize ?? '58x40');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+
+  const needsAddress = connectionType !== 'BROWSER';
+  const dirty =
+    connectionType !== (user?.printerConnectionType ?? 'BROWSER') ||
+    address !== (user?.printerAddress ?? '') ||
+    labelSize !== (user?.printerLabelSize ?? '58x40');
+
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await api.patch<{
+        printerConnectionType: typeof connectionType;
+        printerAddress: string | null;
+        printerLabelSize: string;
+      }>('/auth/preferences', {
+        printerConnectionType: connectionType,
+        printerAddress: needsAddress ? address.trim() : '',
+        printerLabelSize: labelSize,
+      });
+      if (user) setUser({ ...user, ...updated });
+      toast.push('success', t('more.printer.saved'));
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Printer className="h-4 w-4" aria-hidden />
+          {t('more.printer.title')}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={save} className="space-y-3">
+          <p className="text-sm text-muted-foreground">{t('more.printer.lead')}</p>
+
+          <div className="grid gap-2">
+            {(
+              [
+                { value: 'BROWSER', label: t('more.printer.browser'), help: t('more.printer.browserHelp') },
+                { value: 'NETWORK', label: t('more.printer.network'), help: t('more.printer.networkHelp') },
+                { value: 'AGENT', label: t('more.printer.agent'), help: t('more.printer.agentHelp') },
+              ] as const
+            ).map((option) => (
+              <label
+                key={option.value}
+                className="flex touch-target items-start gap-3 rounded-md border p-3 has-[:checked]:border-primary"
+              >
+                <input
+                  type="radio"
+                  name="printer-connection"
+                  value={option.value}
+                  checked={connectionType === option.value}
+                  onChange={() => setConnectionType(option.value)}
+                  className="mt-0.5 h-5 w-5 accent-[hsl(var(--primary))]"
+                />
+                <span className="text-sm">
+                  <b>{option.label}</b> {option.help}
+                </span>
+              </label>
+            ))}
+          </div>
+
+          {needsAddress && (
+            <div className="space-y-1.5">
+              <Label htmlFor="printer-address">
+                {connectionType === 'NETWORK' ? t('more.printer.addressNetwork') : t('more.printer.addressAgent')}
+              </Label>
+              <Input
+                id="printer-address"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder={connectionType === 'NETWORK' ? '192.168.1.50:9100' : 'http://localhost:8080/print'}
+                required
+              />
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <Label htmlFor="printer-label-size">{t('labels.size')}</Label>
+            <Select id="printer-label-size" value={labelSize} onChange={(e) => setLabelSize(e.target.value)}>
+              {LABEL_SIZES.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.width}×{s.height} mm
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          <FormError error={error} />
+          <Button type="submit" disabled={busy || !dirty || (needsAddress && !address.trim())}>
+            {busy ? t('common.saving') : t('common.save')}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   );
 }
 

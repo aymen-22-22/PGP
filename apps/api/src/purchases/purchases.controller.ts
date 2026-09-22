@@ -13,7 +13,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AdminOnly } from '../common/decorators/roles.decorator';
 import type { RequestUser } from '../common/types';
-import { CreatePurchaseDto, QueryPurchasesDto, ReceiveByLabelDto, ReceivePurchaseDto } from './dto/purchase.dto';
+import { CreatePurchaseDto, PrintLabelsDto, QueryPurchasesDto, ReceiveByLabelDto, ReceivePurchaseDto } from './dto/purchase.dto';
 import { PurchasesService } from './purchases.service';
 
 @ApiTags('Purchases')
@@ -84,6 +84,20 @@ export class PurchasesController {
   @ApiOperation({ summary: 'The labels on this purchase, in printing order' })
   labels(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.purchases.labels(user, id);
+  }
+
+  @Post(':id/labels/print')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Print labels to the caller's configured network thermal printer",
+    description: 'Only for the network printer-connection option; the browser and agent options print client-side.',
+  })
+  printLabels(
+    @CurrentUser() user: RequestUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: PrintLabelsDto,
+  ) {
+    return this.purchases.printLabels(user, id, dto);
   }
 
   @Post(':id/cancel')

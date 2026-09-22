@@ -1,5 +1,6 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import type { PrinterConnectionType } from '@prisma/client';
 import { AuditAction, ErrorCode, type AuthUser } from '@phone-erp/shared-types';
 import { randomBytes } from 'node:crypto';
 import { AuditService } from '../audit/audit.service';
@@ -119,6 +120,9 @@ export class AuthService {
         countryCode: user.warehouse?.countryRef?.code ?? null,
         countryCurrency: user.warehouse?.countryRef?.currency ?? null,
         notifyByEmail: user.notifyByEmail,
+        printerConnectionType: user.printerConnectionType,
+        printerAddress: user.printerAddress,
+        printerLabelSize: user.printerLabelSize,
       },
       accessToken: this.jwt.sign(payload, { expiresIn: this.config.jwt.expiresIn }),
       csrfToken: randomBytes(24).toString('hex'),
@@ -154,6 +158,9 @@ export class AuthService {
       countryCode: user.warehouse?.countryRef?.code ?? null,
       countryCurrency: user.warehouse?.countryRef?.currency ?? null,
       notifyByEmail: user.notifyByEmail,
+      printerConnectionType: user.printerConnectionType,
+      printerAddress: user.printerAddress,
+      printerLabelSize: user.printerLabelSize,
     };
   }
 
@@ -212,11 +219,31 @@ export class AuthService {
    * Deliberately not routed through the admin user endpoint: a person turning
    * off their own email should not need the permission to edit everyone.
    */
-  async updatePreferences(user: RequestUser, dto: { notifyByEmail?: boolean }) {
+  async updatePreferences(
+    user: RequestUser,
+    dto: {
+      notifyByEmail?: boolean;
+      printerConnectionType?: PrinterConnectionType;
+      printerAddress?: string;
+      printerLabelSize?: string;
+    },
+  ) {
     const updated = await this.prisma.user.update({
       where: { id: user.id },
-      data: { ...(dto.notifyByEmail !== undefined ? { notifyByEmail: dto.notifyByEmail } : {}) },
-      select: { id: true, notifyByEmail: true },
+      data: {
+        ...(dto.notifyByEmail !== undefined ? { notifyByEmail: dto.notifyByEmail } : {}),
+        ...(dto.printerConnectionType !== undefined ? { printerConnectionType: dto.printerConnectionType } : {}),
+        // An empty string clears the address (switching back to BROWSER, say).
+        ...(dto.printerAddress !== undefined ? { printerAddress: dto.printerAddress || null } : {}),
+        ...(dto.printerLabelSize !== undefined ? { printerLabelSize: dto.printerLabelSize } : {}),
+      },
+      select: {
+        id: true,
+        notifyByEmail: true,
+        printerConnectionType: true,
+        printerAddress: true,
+        printerLabelSize: true,
+      },
     });
     return updated;
   }

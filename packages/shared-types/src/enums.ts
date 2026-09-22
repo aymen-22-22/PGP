@@ -179,3 +179,11 @@ export const SalesChannel = {
 } as const;
 export type SalesChannel = (typeof SalesChannel)[keyof typeof SalesChannel];
 
+/** How a person's browser gets a unit label to their thermal printer. */
+export const PrinterConnectionType = {
+  BROWSER: 'BROWSER',
+  NETWORK: 'NETWORK',
+  AGENT: 'AGENT',
+} as const;
+export type PrinterConnectionType = (typeof PrinterConnectionType)[keyof typeof PrinterConnectionType];
+

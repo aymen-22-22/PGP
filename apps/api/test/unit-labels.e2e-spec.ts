@@ -1,4 +1,5 @@
 import { INestApplication } from '@nestjs/common';
+import { createServer, Server } from 'node:net';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { Fixture, as, createTestApp, login, seedFixture } from './helpers';
 
@@ -152,5 +153,65 @@ describe('Purchase unit labels', () => {
 
     const overlap = labelsOf(more.body).filter((c) => labelsOf(first.body).includes(c));
     expect(overlap).toEqual([]);
+  });
+
+  describe('printing to a configured network printer', () => {
+    it('refuses when no network printer is set up', async () => {
+      await as(app, admin).post(`/api/v1/purchases/${fixture.purchase.id}/labels`).expect(200);
+      const res = await as(app, admin)
+        .post(`/api/v1/purchases/${fixture.purchase.id}/labels/print`)
+        .send({})
+        .expect(400);
+      expect(res.body.message).toMatch(/no network printer/i);
+    });
+
+    it('sends the raw ticket to the configured host:port and marks the labels printed', async () => {
+      // A bare TCP server stands in for the thermal printer — the point here
+      // is that the bytes actually leave the API and the labels are marked
+      // printed, not that a real printer parses ESC/POS correctly.
+      const received: Buffer[] = [];
+      const server: Server = createServer((socket) => {
+        socket.on('data', (chunk) => received.push(chunk));
+      });
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+      const port = (server.address() as { port: number }).port;
+
+      await as(app, admin)
+        .patch('/api/v1/auth/preferences')
+        .send({ printerConnectionType: 'NETWORK', printerAddress: `127.0.0.1:${port}` })
+        .expect(200);
+
+      const labels = await as(app, admin).post(`/api/v1/purchases/${fixture.purchase.id}/labels`).expect(200);
+
+      const printed = await as(app, admin)
+        .post(`/api/v1/purchases/${fixture.purchase.id}/labels/print`)
+        .send({})
+        .expect(200);
+      expect(printed.body.printed).toBe(labels.body.data.length);
+
+      // Give the fake printer's socket a moment to flush before asserting.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const payload = Buffer.concat(received).toString('latin1');
+      expect(payload).toContain(labels.body.data[0].code);
+
+      const after = await as(app, admin).get(`/api/v1/purchases/${fixture.purchase.id}/labels`).expect(200);
+      expect(after.body.data.every((l: { printedAt: string | null }) => l.printedAt)).toBe(true);
+
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    });
+
+    it('reports a clear error when the printer cannot be reached', async () => {
+      await as(app, admin)
+        .patch('/api/v1/auth/preferences')
+        .send({ printerConnectionType: 'NETWORK', printerAddress: '127.0.0.1:1' })
+        .expect(200);
+      await as(app, admin).post(`/api/v1/purchases/${fixture.purchase.id}/labels`).expect(200);
+
+      const res = await as(app, admin)
+        .post(`/api/v1/purchases/${fixture.purchase.id}/labels/print`)
+        .send({})
+        .expect(400);
+      expect(res.body.message).toMatch(/could not reach the printer/i);
+    });
   });
 });

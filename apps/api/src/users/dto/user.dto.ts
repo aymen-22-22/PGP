@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { Role } from '@prisma/client';
+import { PrinterConnectionType, Role } from '@prisma/client';
 import { Transform } from 'class-transformer';
 import {
   IsBoolean,
@@ -45,6 +45,23 @@ export class UpdatePreferencesDto {
   @IsOptional()
   @IsBoolean()
   notifyByEmail?: boolean;
+
+  @ApiPropertyOptional({ enum: PrinterConnectionType })
+  @IsOptional()
+  @IsEnum(PrinterConnectionType)
+  printerConnectionType?: PrinterConnectionType;
+
+  @ApiPropertyOptional({ description: 'host:port for NETWORK, or the agent URL for AGENT. Send "" to clear.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  printerAddress?: string;
+
+  @ApiPropertyOptional({ example: '58x40' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  printerLabelSize?: string;
 }
 
 export class QueryUsersDto extends PaginationQueryDto {

@@ -116,6 +116,15 @@ export class ReceiveByLabelDto {
   code!: string;
 }
 
+export class PrintLabelsDto {
+  @ApiPropertyOptional({ description: 'Only these label ids; omit to print every label on the purchase' })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsUUID('4', { each: true })
+  labelIds?: string[];
+}
+
 export class QueryPurchasesDto extends PaginationQueryDto {
   @ApiPropertyOptional({ enum: PurchaseStatus })
   @IsOptional()
