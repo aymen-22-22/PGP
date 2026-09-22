@@ -10,15 +10,18 @@ import { formatImei } from '@/lib/utils';
 
 interface HistoryResponse {
   device: {
-    imei: string;
+    imei: string | null;
     imei2: string | null;
     serialNumber: string | null;
+    // Set only for a unit that arrived through the label-first workflow —
+    // its printed code is the only handle it has when there is no IMEI.
+    label: { code: string } | null;
     status: string;
     receivedAt: string | null;
     soldAt: string | null;
     purchaseCost: string | null;
     landedCost: string | null;
-    product: { name: string; sku: string; brand: string; model: string };
+    product: { name: string; sku: string; barcode: string | null; brand: string; model: string };
     currentWarehouse: { id: string; name: string; country: string } | null;
     supplier: { id: string; name: string; country: string | null } | null;
     purchase: { id: string; number: string; purchaseDate: string } | null;
@@ -38,6 +41,8 @@ interface HistoryResponse {
     fromWarehouse: { name: string } | null;
     toWarehouse: { name: string } | null;
     performedBy: { name: string } | null;
+    // Who actually carried it, when this movement was a transfer shipment.
+    carrier: { name: string | null; driver: string | null; freeText: string | null } | null;
   }[];
 }
 
@@ -60,6 +65,10 @@ export default function ImeiDetailPage() {
   if (query.isError) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
 
   const { device, movements } = query.data!;
+  // What actually identifies this unit: an IMEI if it has one, its printed
+  // label if it arrived through the label-first workflow, else nothing.
+  const handle = device.imei ?? device.label?.code ?? null;
+  const isLabel = !device.imei && Boolean(device.label);
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
@@ -72,7 +81,12 @@ export default function ImeiDetailPage() {
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h1 className="text-xl font-bold leading-snug">{device.product.name}</h1>
-              <p className="tabular text-base text-muted-foreground">{formatImei(device.imei)}</p>
+              <p className="text-sm text-muted-foreground">
+                {device.product.brand} · {device.product.model}
+              </p>
+              <p className="tabular text-base text-muted-foreground">
+                {isLabel ? t('imei.labelCode') : t('imei.imei')} · {formatImei(handle)}
+              </p>
             </div>
             <StatusBadge status={device.status} />
           </div>
@@ -80,6 +94,7 @@ export default function ImeiDetailPage() {
           <dl className="grid grid-cols-2 gap-3 border-t pt-3 text-sm sm:grid-cols-4">
             <Field label={t('common.warehouse')} value={device.currentWarehouse?.name ?? t('imei.notInWarehouse')} />
             <Field label={t('common.sku')} value={device.product.sku} mono />
+            {device.product.barcode && <Field label={t('common.barcode')} value={device.product.barcode} mono />}
             <Field label={t('common.supplier')} value={device.supplier?.name ?? '—'} />
             <Field
               label={t('imei.purchaseCost')}
@@ -126,6 +141,17 @@ export default function ImeiDetailPage() {
                       </span>
                     )}
                   </p>
+                  {movement.carrier && (movement.carrier.name || movement.carrier.driver || movement.carrier.freeText) && (
+                    <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                      <Truck className="h-3 w-3" aria-hidden />
+                      {t('imei.carriedBy', {
+                        carrier:
+                          [movement.carrier.name, movement.carrier.driver].filter(Boolean).join(' · ') ||
+                          movement.carrier.freeText ||
+                          '—',
+                      })}
+                    </p>
+                  )}
                 </li>
               );
             })}

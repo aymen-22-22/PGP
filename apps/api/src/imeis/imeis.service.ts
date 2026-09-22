@@ -41,6 +41,7 @@ export class ImeisService {
       where,
       include: {
         product: true,
+        label: { select: { code: true } },
         currentWarehouse: { select: { id: true, name: true, code: true, country: true } },
         purchase: {
           select: {
@@ -79,6 +80,9 @@ export class ImeisService {
       imei: device.imei,
       imei2: device.imei2,
       serialNumber: device.serialNumber,
+      // Null unless this unit arrived through the label-first workflow — the
+      // only handle it has when there is no IMEI to show instead.
+      label: device.label ? { code: device.label.code } : null,
       status: device.status,
       receivedAt: device.receivedAt,
       soldAt: device.soldAt,
@@ -127,7 +131,36 @@ export class ImeisService {
       },
     });
 
-    return { device, movements };
+    // Who actually carried it, for the transfers among these movements — the
+    // journal otherwise says a phone moved warehouses with nobody named.
+    const transferIds = [
+      ...new Set(movements.filter((m) => m.referenceType === 'Transfer').map((m) => m.referenceId!)),
+    ];
+    const shipments = transferIds.length
+      ? await this.prisma.shipment.findMany({
+          where: { transferId: { in: transferIds } },
+          select: {
+            transferId: true,
+            carrier: true,
+            deliveryCompany: { select: { id: true, name: true } },
+            driver: { select: { id: true, name: true } },
+          },
+        })
+      : [];
+    const carrierByTransfer = new Map(shipments.map((s) => [s.transferId, s]));
+
+    return {
+      device,
+      movements: movements.map((m) => {
+        const shipment = m.referenceType === 'Transfer' && m.referenceId ? carrierByTransfer.get(m.referenceId) : undefined;
+        return {
+          ...m,
+          carrier: shipment
+            ? { name: shipment.deliveryCompany?.name ?? null, driver: shipment.driver?.name ?? null, freeText: shipment.carrier }
+            : null,
+        };
+      }),
+    };
   }
 
   /** Type-ahead over IMEI, serial number and product, used by the scan screen. */

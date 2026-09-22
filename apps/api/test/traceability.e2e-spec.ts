@@ -135,6 +135,42 @@ describe('IMEI traceability and the movement ledger (spec §20, §21)', () => {
     expect(after.body.data[0].inStock).toBe(3);
   });
 
+  it('carries the label code and the carrier who moved it into the history', async () => {
+    const [label] = await (
+      await as(app, admin).post(`/api/v1/purchases/${fixture.purchase.id}/labels`).expect(200)
+    ).body.data as { code: string }[];
+    await as(app, admin)
+      .post(`/api/v1/purchases/${fixture.purchase.id}/receive-by-label`)
+      .send({ code: label.code })
+      .expect(200);
+
+    const company = await as(app, admin)
+      .post('/api/v1/delivery/companies')
+      .send({ name: 'XYZ Transport' })
+      .expect(201);
+
+    const transfer = await as(app, admin)
+      .post('/api/v1/transfers')
+      .send({
+        sourceWarehouseId: fixture.central.id,
+        destinationWarehouseId: fixture.france.id,
+        items: [{ productId: fixture.product.id, quantity: 1 }],
+        imeis: [label.code],
+        deliveryCompanyId: company.body.id,
+      })
+      .expect(201);
+    await as(app, admin).post(`/api/v1/transfers/${transfer.body.id}/ship`).expect(200);
+
+    const history = await as(app, admin).get(`/api/v1/imeis/${label.code}/history`).expect(200);
+
+    expect(history.body.device.imei).toBeNull();
+    expect(history.body.device.label).toEqual({ code: label.code });
+    expect(history.body.device.product.barcode).not.toBeUndefined();
+
+    const shipped = history.body.movements.find((m: { type: string }) => m.type === 'TRANSFER_OUT');
+    expect(shipped.carrier).toMatchObject({ name: 'XYZ Transport' });
+  });
+
   it('writes an audit trail for every significant action', async () => {
     const logs = await prisma.auditLog.findMany({ orderBy: { createdAt: 'asc' } });
     const actions = logs.map((l) => l.action);

@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateDeliveryCompanyDto,
   CreateDriverDto,
+  QueryCarrierShipmentsDto,
   QueryDeliveryDto,
   UpdateDeliveryCompanyDto,
   UpdateDriverDto,
@@ -212,6 +213,72 @@ export class DeliveryService {
       metadata: { name: driver.name },
     });
     return { deleted: true };
+  }
+
+  // --- what a carrier has moved ---------------------------------------------
+
+  /** Every shipment a transport firm has carried, with what was on it. */
+  async companyShipments(id: string, query: QueryCarrierShipmentsDto) {
+    const company = await this.prisma.deliveryCompany.findUnique({ where: { id }, select: { id: true, name: true } });
+    if (!company) throw BusinessError.notFound('Delivery company', id);
+    const page = await this.shipmentsFor({ deliveryCompanyId: id }, query);
+    return { carrier: company, ...page };
+  }
+
+  /** Every shipment a driver has carried, with what was on it. */
+  async driverShipments(id: string, query: QueryCarrierShipmentsDto) {
+    const driver = await this.prisma.driver.findUnique({ where: { id }, select: { id: true, name: true } });
+    if (!driver) throw BusinessError.notFound('Driver', id);
+    const page = await this.shipmentsFor({ driverId: id }, query);
+    return { carrier: driver, ...page };
+  }
+
+  private async shipmentsFor(who: Prisma.ShipmentWhereInput, query: QueryCarrierShipmentsDto) {
+    const where: Prisma.ShipmentWhereInput = { ...who, ...(query.status ? { status: query.status } : {}) };
+
+    const [rows, total] = await this.prisma.$transaction([
+      this.prisma.shipment.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: query.skip,
+        take: query.pageSize,
+        include: {
+          transfer: {
+            select: {
+              id: true,
+              number: true,
+              sourceWarehouse: { select: { id: true, name: true } },
+              destinationWarehouse: { select: { id: true, name: true } },
+              items: {
+                select: { quantity: true, product: { select: { id: true, name: true, sku: true } } },
+              },
+            },
+          },
+        },
+      }),
+      this.prisma.shipment.count({ where }),
+    ]);
+
+    const data = rows.map((s) => ({
+      id: s.id,
+      number: s.number,
+      status: s.status,
+      shippedAt: s.shippedAt,
+      receivedAt: s.receivedAt,
+      transfer: {
+        id: s.transfer.id,
+        number: s.transfer.number,
+        sourceWarehouse: s.transfer.sourceWarehouse,
+        destinationWarehouse: s.transfer.destinationWarehouse,
+        items: s.transfer.items.map((i) => ({
+          productId: i.product.id,
+          name: i.product.name,
+          sku: i.product.sku,
+          quantity: i.quantity,
+        })),
+      },
+    }));
+    return paginate(data, total, query);
   }
 
   // --- guards --------------------------------------------------------------

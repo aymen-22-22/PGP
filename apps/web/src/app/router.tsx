@@ -35,6 +35,7 @@ const ProductsPage = lazy(() => import('@/pages/products'));
 const PartnersPage = lazy(() => import('@/pages/partners'));
 const WarehousesPage = lazy(() => import('@/pages/warehouses'));
 const DeliveryPage = lazy(() => import('@/pages/delivery'));
+const DeliveryCarrierPage = lazy(() => import('@/pages/delivery-carrier'));
 const UsersPage = lazy(() => import('@/pages/users'));
 const AuditLogsPage = lazy(() => import('@/pages/audit-logs'));
 const NotificationsPage = lazy(() => import('@/pages/notifications'));
@@ -159,6 +160,22 @@ export function AppRouter() {
             element={
               <RequireAdmin>
                 <DeliveryPage />
+              </RequireAdmin>
+            }
+          />
+          <Route
+            path="delivery/companies/:id"
+            element={
+              <RequireAdmin>
+                <DeliveryCarrierPage kind="companies" />
+              </RequireAdmin>
+            }
+          />
+          <Route
+            path="delivery/drivers/:id"
+            element={
+              <RequireAdmin>
+                <DeliveryCarrierPage kind="drivers" />
               </RequireAdmin>
             }
           />

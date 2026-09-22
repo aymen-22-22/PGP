@@ -1,15 +1,13 @@
 import { ArrowDownToLine, Package, ScanLine, Truck, Wallet } from 'lucide-react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input, Label, Select } from '@/components/ui/input';
 import { Stat, StatGrid } from '@/components/ui/stat';
 import { ErrorState, LoadingState } from '@/components/ui/states';
 import { TableWrap, Td, Th, Tr } from '@/components/ui/table';
 import type { Dashboard } from '@phone-erp/shared-types';
 import { useI18n } from '@/i18n/provider';
 import { useApiQuery } from '@/hooks/use-api';
-import { buildQuery } from '@/lib/api';
 import { isAdmin, useAuth } from '@/lib/auth';
 import { formatNumber, plural } from '@/lib/utils';
 
@@ -18,35 +16,9 @@ export default function HomePage() {
   const user = useAuth((s) => s.user);
   const admin = isAdmin(user);
 
-  // The filters live in the URL rather than in component state, so the context
-  // that produced a figure can be handed to the ledger that explains it — and
-  // so a dashboard someone has narrowed down can be shared or reloaded.
   const { t, money } = useI18n();
-  const [params, setParams] = useSearchParams();
-  const filters = {
-    warehouseId: params.get('warehouseId') ?? '',
-    from: params.get('from') ?? '',
-    to: params.get('to') ?? '',
-  };
-  const setFilter = (key: keyof typeof filters, value: string) => {
-    const next = new URLSearchParams(params);
-    if (value) next.set(key, value);
-    else next.delete(key);
-    setParams(next, { replace: true });
-  };
-
-  const scope = buildQuery({
-    warehouseId: filters.warehouseId || undefined,
-    // A plain date means the whole of that day, which is what someone picking
-    // "to: today" means — not midnight this morning.
-    from: filters.from ? `${filters.from}T00:00:00.000Z` : undefined,
-    to: filters.to ? `${filters.to}T23:59:59.999Z` : undefined,
-  });
-
-  const warehouses = useApiQuery<{ id: string; name: string }[]>('/warehouses', { enabled: admin });
-  const query = useApiQuery<Dashboard>(`/reports/dashboard${scope}`);
-  /** Ledgers open with exactly the filters that produced the figure. */
-  const ledger = (name: string) => `/ledger/${name}${scope}`;
+  const query = useApiQuery<Dashboard>('/reports/dashboard');
+  const ledger = (name: string) => `/ledger/${name}`;
 
   if (query.isLoading) return <LoadingState label="Loading your dashboard…" />;
   if (query.isError) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
@@ -72,44 +44,6 @@ export default function HomePage() {
           </Link>
         </Button>
       </header>
-
-      {/* Narrowing the dashboard narrows every ledger opened from it. */}
-      <Card>
-        <CardContent className="grid gap-3 p-4 sm:grid-cols-3">
-          {admin && (
-            <div className="space-y-1.5">
-              <Label htmlFor="f-warehouse">{t('home.filter.warehouse')}</Label>
-              <Select
-                id="f-warehouse"
-                value={filters.warehouseId}
-                onChange={(e) => setFilter('warehouseId', e.target.value)}
-              >
-                <option value="">{t('home.filter.everyWarehouse')}</option>
-                {warehouses.data?.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
-          <div className="space-y-1.5">
-            <Label htmlFor="f-from">{t('home.filter.from')}</Label>
-            <Input id="f-from" type="date" value={filters.from} onChange={(e) => setFilter('from', e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="f-to">{t('home.filter.to')}</Label>
-            <Input id="f-to" type="date" value={filters.to} onChange={(e) => setFilter('to', e.target.value)} />
-          </div>
-          {(filters.warehouseId || filters.from || filters.to) && (
-            <div className="sm:col-span-3">
-              <Button variant="ghost" size="sm" className="-ms-2 gap-1" onClick={() => setParams({}, { replace: true })}>
-                {t('home.filter.clear')}
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
       <StatGrid>
         {/* These open the existing lists rather than new ones: the records
