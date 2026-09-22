@@ -351,15 +351,18 @@ partway through. Once it's set up, a merged PR is the whole deploy.
 
 Set it up once:
 
-1. Generate a key pair dedicated to this: `ssh-keygen -t ed25519 -f deploy_key -N ""`.
+1. Generate a key pair dedicated to this: `ssh-keygen -t ed25519 -f deploy_key`.
+   cPanel's own "Manage SSH Keys" refuses to import a key with no
+   passphrase, so give it one — the pipeline unlocks it non-interactively.
 2. Install the **public** half on the host — cPanel → SSH Access → Manage SSH
    Keys → Import Key, or append `deploy_key.pub`'s contents to
    `~/.ssh/authorized_keys` by hand.
 3. In the repository's GitHub settings, add these secrets (Settings →
    Secrets and variables → Actions → Secrets): `DEPLOY_SSH_HOST`,
    `DEPLOY_SSH_PORT`, `DEPLOY_SSH_USER` (cPanel's SSH Access page shows the
-   host and port), and `DEPLOY_SSH_KEY` — the **private** half,
-   `deploy_key`'s contents, never `deploy_key.pub`.
+   host and port), `DEPLOY_SSH_KEY` — the **private** half, `deploy_key`'s
+   contents, never `deploy_key.pub` — and `DEPLOY_SSH_KEY_PASSPHRASE`, the
+   passphrase from step 1.
 4. If the application checkout or the web document root are not at
    `~/PGP-erp` and `~/pgp.etdledger.com`, add `DEPLOY_APP_DIR` and/or
    `DEPLOY_WEB_ROOT` as repository **variables** (same page, Variables tab)

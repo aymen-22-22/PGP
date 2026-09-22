@@ -24,10 +24,16 @@ name: Deploy to shared host
 #                        Manage SSH Keys → Import Key, or appended to
 #                        ~/.ssh/authorized_keys by hand). Generate a pair
 #                        dedicated to this with:
-#                          ssh-keygen -t ed25519 -f deploy_key -N ""
+#                          ssh-keygen -t ed25519 -f deploy_key
 #                        and paste deploy_key's contents into this secret —
 #                        never deploy_key.pub, which is the one that goes on
 #                        the host.
+#   DEPLOY_SSH_KEY_PASSPHRASE — the passphrase for that key. Some hosts
+#                        (cPanel's "Manage SSH Keys" among them) refuse to
+#                        import a key with no passphrase, so this pipeline
+#                        assumes one exists and unlocks it non-interactively
+#                        with SSH_ASKPASS. Leave the secret unset (or empty)
+#                        if a future key genuinely has none.
 #
 # Optional repository variables (Settings → Variables → Actions). Both
 # accept a leading ~, expanded against the account's home directory:
@@ -82,10 +88,32 @@ jobs:
       - name: Package the build
         run: tar czf /tmp/pgp-deploy-payload.tar.gz node_modules/.prisma apps/api/dist apps/web/dist packages/shared-types/dist
 
+      # Not webfactory/ssh-agent: it has no way to supply a passphrase, and
+      # cPanel's own "Manage SSH Keys" refuses to import a key without one.
+      # SSH_ASKPASS_REQUIRE=force is what makes ssh-add use the askpass
+      # script below instead of trying (and failing, for lack of a TTY) to
+      # prompt interactively — it needs OpenSSH 8.4+, which every current
+      # ubuntu-latest runner has.
       - name: Configure SSH
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_KEY_PASSPHRASE: ${{ secrets.DEPLOY_SSH_KEY_PASSPHRASE }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          eval "$(ssh-agent -s)"
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
+
+          askpass="$RUNNER_TEMP/askpass.sh"
+          printf '#!/bin/sh\necho "$SSH_KEY_PASSPHRASE"\n' > "$askpass"
+          chmod 700 "$askpass"
+
+          SSH_ASKPASS="$askpass" SSH_ASKPASS_REQUIRE=force setsid ssh-add ~/.ssh/deploy_key < /dev/null
+          rm -f "$askpass"
 
       - name: Trust the host key
         run: |
