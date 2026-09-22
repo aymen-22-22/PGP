@@ -204,6 +204,15 @@ export default function PurchaseLabelsPage() {
           <div className="flex flex-wrap justify-center gap-4 print:block print:gap-0">
             {sheet.data.map((label) => {
               const subtitle = [label.product.storage, label.product.color].filter(Boolean).join(' · ');
+              const qrMm = size.height * 0.68;
+              // The code (e.g. "UL-2026-000123") has to share the row with the
+              // QR, so its size is bounded by the text column's actual width,
+              // not just the label's height — sizing off height alone is what
+              // sent a 14-character code past the edge of the card. It's still
+              // allowed to wrap onto a second line rather than truncate: a
+              // human reading it as a QR-scan fallback needs every character.
+              const colWidthMm = size.width - qrMm - 4;
+              const codeMm = Math.max(1.6, Math.min(size.height * 0.12, colWidthMm / (label.code.length * 0.62)));
               return (
                 <div
                   key={label.id}
@@ -215,20 +224,20 @@ export default function PurchaseLabelsPage() {
                   // than pushed whole onto the next page.
                   className="label-page flex shrink-0 break-inside-avoid items-center gap-[2mm] overflow-hidden border border-dashed border-border bg-white p-[1mm] text-black print:border-0 print:break-inside-avoid print:break-after-page print:last:break-after-auto"
                 >
-                  <CodeSymbol value={label.code} size={Math.round(mm(size.height * 0.72))} />
+                  <CodeSymbol value={label.code} size={Math.round(mm(qrMm))} />
                   <div className="flex min-w-0 flex-1 flex-col justify-center gap-[0.5mm]">
-                    <p className="w-full truncate font-semibold leading-none" style={{ fontSize: mm(size.height * 0.15) }}>
+                    <p className="w-full truncate font-semibold leading-none" style={{ fontSize: mm(size.height * 0.1) }}>
                       {label.product.name}
                     </p>
                     {subtitle && (
-                      <p className="w-full truncate leading-none" style={{ fontSize: mm(size.height * 0.1) }}>
+                      <p className="w-full truncate leading-none" style={{ fontSize: mm(size.height * 0.07) }}>
                         {subtitle}
                       </p>
                     )}
-                    <p className="tabular font-bold leading-none" style={{ fontSize: mm(size.height * 0.2) }}>
+                    <p className="tabular w-full break-all font-bold leading-tight" style={{ fontSize: mm(codeMm) }}>
                       {label.code}
                     </p>
-                    <p className="leading-none" style={{ fontSize: mm(size.height * 0.09) }}>
+                    <p className="w-full truncate leading-none" style={{ fontSize: mm(size.height * 0.06) }}>
                       {label.sequence}/{label.of} · {sheet.purchase.number}
                     </p>
                   </div>
