@@ -29,8 +29,14 @@ cd "$app_dir"
 # still finds it without editing this script.
 nodevenv_activate="$(ls -d "$HOME"/nodevenv/"$(basename "$app_dir")"/*/bin/activate 2>/dev/null | head -n1)"
 if [ -n "$nodevenv_activate" ]; then
+  # cPanel's own activate script references CL_VIRTUAL_ENV, which a real
+  # login shell has in its environment and a bare SSH command does not; with
+  # -u still on that is an unbound-variable error, not a missing command.
+  # Not our script to fix — relax -u for just this line.
+  set +u
   # shellcheck disable=SC1090
   source "$nodevenv_activate"
+  set -u
 else
   echo "::warning::No nodevenv found for $(basename "$app_dir") under \$HOME/nodevenv — relying on node already being on PATH." >&2
 fi
