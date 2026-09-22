@@ -11,12 +11,17 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { AdminOnly } from '../common/decorators/roles.decorator';
 import type { RequestUser } from '../common/types';
 import { CompleteSaleDto, CreateSaleDto, QuerySalesDto } from './dto/sale.dto';
 import { SalesService } from './sales.service';
 
+// Selling — quoting, invoicing, cancelling — is an office function in this
+// business, not a warehouse one. A warehouse account never needs to see what
+// a unit sells for, only what it is and where it goes.
 @ApiTags('Sales')
 @Controller('sales')
+@AdminOnly()
 export class SalesController {
   constructor(private readonly sales: SalesService) {}
 

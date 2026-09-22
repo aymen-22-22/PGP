@@ -1,12 +1,16 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { AdminOnly } from '../common/decorators/roles.decorator';
 import type { RequestUser } from '../common/types';
 import { PosLookupDto, PosSaleDto } from './dto/pos.dto';
 import { PosService } from './pos.service';
 
+// The counter is where phones are sold — every route here quotes a selling
+// price or takes payment. A warehouse account has no business at the till.
 @ApiTags('POS')
 @Controller('pos')
+@AdminOnly()
 export class PosController {
   constructor(private readonly pos: PosService) {}
 

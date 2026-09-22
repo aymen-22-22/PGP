@@ -6,6 +6,44 @@ export interface NormalizedImeiList {
 }
 
 /**
+ * Normalises a batch of scanned codes without assuming they are IMEIs.
+ *
+ * A scan at transfer or sale time may be a printed unit label
+ * (`UL-2026-000123`) as easily as a legacy IMEI — both are valid, opaque
+ * strings from this point's perspective, and it is the resolver on the other
+ * end (matching against Device.imei or PurchaseUnitLabel.code) that decides
+ * whether one is real. Only whitespace is trimmed and case is normalised;
+ * rejecting an unrecognised code happens at resolution, with a message that
+ * can say what was actually typed rather than "not a valid IMEI".
+ */
+export function normalizeScanCodes(raw: string[]): string[] {
+  const seen = new Set<string>();
+  const duplicates: string[] = [];
+  const result: string[] = [];
+
+  for (const value of raw) {
+    const trimmed = (value ?? '').trim().toUpperCase();
+    if (!trimmed) continue;
+    if (seen.has(trimmed)) {
+      duplicates.push(trimmed);
+      continue;
+    }
+    seen.add(trimmed);
+    result.push(trimmed);
+  }
+
+  if (duplicates.length > 0) {
+    throw new BusinessError(
+      ErrorCode.IMEI_DUPLICATE_IN_REQUEST,
+      `${duplicates.length} code(s) were scanned more than once.`,
+      400,
+      { duplicates: duplicates.slice(0, 20) },
+    );
+  }
+  return result;
+}
+
+/**
  * Normalises a batch of scanned IMEIs and rejects the batch if any entry is
  * malformed or repeated. Scanners routinely append whitespace or a carriage
  * return, so normalisation happens before any comparison.

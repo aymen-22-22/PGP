@@ -6,15 +6,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { EmptyState, ErrorState, FormError, LoadingState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
-import { CameraScanner } from '@/features/scanner/camera-scanner';
-import { ScanInput } from '@/features/scanner/scan-input';
-import { ScanList, ScanProgress } from '@/features/scanner/scan-list';
-import { useScanBuffer } from '@/features/scanner/use-scan-buffer';
+import { CodeList } from '@/features/scanner/code-list';
+import { CodeScanInput } from '@/features/scanner/code-scan-input';
+import { ScanProgress } from '@/features/scanner/scan-list';
+import { useCodeBuffer } from '@/features/scanner/use-code-buffer';
 import { api } from '@/lib/api';
 import { useApiMutation, useApiQuery } from '@/hooks/use-api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/i18n/provider';
-import { formatImei } from '@/lib/utils';
 
 interface TransferDetail {
   id: string;
@@ -131,9 +130,13 @@ export default function TransferDetailPage() {
             <ul className="max-h-96 divide-y overflow-y-auto rounded-md border">
               {transfer.devices.map((line) => (
                 <li key={line.id} className="flex items-center gap-3 px-3 py-2.5">
-                  <Link to={`/imei/${line.imei}`} className="tabular flex-1 truncate font-medium hover:underline">
-                    {formatImei(line.imei)}
-                  </Link>
+                  {/^\d+$/.test(line.imei) ? (
+                    <Link to={`/imei/${line.imei}`} className="tabular flex-1 truncate font-medium hover:underline">
+                      {line.imei}
+                    </Link>
+                  ) : (
+                    <span className="tabular flex-1 truncate font-medium">{line.imei}</span>
+                  )}
                   <StatusBadge status={line.receivedAt ? 'RECEIVED' : line.device.status} />
                 </li>
               ))}
@@ -149,14 +152,14 @@ export default function TransferDetailPage() {
 function PrepareAndShip({ transfer, onDone }: { transfer: TransferDetail; onDone: () => void }) {
   const { t } = useI18n();
   const toast = useToast();
-  const buffer = useScanBuffer();
+  const buffer = useCodeBuffer();
 
   const autoFill = useApiMutation(
     () => api.post<{ added: number }>(`/transfers/${transfer.id}/auto-fill`),
     ['/transfers', '/inventory', '/reports'],
   );
   const load = useApiMutation(
-    (imeis: string[]) => api.post<{ added: number }>(`/transfers/${transfer.id}/load`, { imeis }),
+    (codes: string[]) => api.post<{ added: number }>(`/transfers/${transfer.id}/load`, { imeis: codes }),
     ['/transfers', '/inventory'],
   );
   const ship = useApiMutation(
@@ -174,22 +177,21 @@ function PrepareAndShip({ transfer, onDone }: { transfer: TransferDetail; onDone
       <CardContent className="space-y-4">
         {remaining > 0 && (
           <>
-            <ScanInput
-              onScan={(imei) => buffer.add(imei)}
+            <CodeScanInput
+              onScan={(code) => buffer.add(code)}
               outcome={buffer.lastOutcome}
               label={t('transfer.scanToLoad', { remaining: String(remaining) })}
             />
-            <CameraScanner onDetect={(imei) => buffer.add(imei)} />
 
             {buffer.count > 0 && (
               <>
-                <ScanList entries={buffer.entries} onRemove={buffer.remove} />
+                <CodeList entries={buffer.entries} onRemove={buffer.remove} />
                 <Button
                   size="lg"
                   className="w-full"
                   disabled={load.isPending}
                   onClick={() =>
-                    load.mutate(buffer.imeis, {
+                    load.mutate(buffer.codes, {
                       onSuccess: (result) => {
                         toast.push('success', t('transfer.phonesLoaded', { count: result.added }));
                         buffer.reset();
@@ -265,16 +267,16 @@ function PrepareAndShip({ transfer, onDone }: { transfer: TransferDetail; onDone
 function ReceiveShipment({ transfer, onDone }: { transfer: TransferDetail; onDone: () => void }) {
   const { t } = useI18n();
   const toast = useToast();
-  const expectedImeis = useMemo(
+  const expectedCodes = useMemo(
     () => new Set(transfer.devices.filter((d) => !d.receivedAt).map((d) => d.imei)),
     [transfer.devices],
   );
-  const expected = expectedImeis.size;
+  const expected = expectedCodes.size;
   // Giving the buffer the expected set means a phone from another shipment is
   // called out on the scan itself, not discovered at the end of a long batch.
-  const buffer = useScanBuffer({
+  const buffer = useCodeBuffer({
     expected,
-    expectedImeis,
+    expectedCodes,
     strayReason: t('transfer.strayReason'),
   });
   const [allowPartial, setAllowPartial] = useState(false);
@@ -301,8 +303,7 @@ function ReceiveShipment({ transfer, onDone }: { transfer: TransferDetail; onDon
       <CardContent className="space-y-4">
         <ScanProgress expected={expected} scanned={buffer.count} />
 
-        <ScanInput onScan={(imei) => buffer.add(imei)} outcome={buffer.lastOutcome} />
-        <CameraScanner onDetect={(imei) => buffer.add(imei)} />
+        <CodeScanInput onScan={(code) => buffer.add(code)} outcome={buffer.lastOutcome} />
 
         {strays.length > 0 && (
           <div
@@ -310,12 +311,12 @@ function ReceiveShipment({ transfer, onDone }: { transfer: TransferDetail; onDon
             className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
           >
             <p className="font-semibold">{t('transfer.strayAlert', { count: strays.length })}</p>
-            <p className="tabular mt-1">{strays.slice(0, 5).map(formatImei).join(', ')}</p>
+            <p className="tabular mt-1">{strays.slice(0, 5).join(', ')}</p>
             <p className="mt-1">{t('transfer.removeStray', { count: strays.length })}</p>
           </div>
         )}
 
-        <ScanList entries={buffer.entries} onRemove={buffer.remove} />
+        <CodeList entries={buffer.entries} onRemove={buffer.remove} />
 
         {buffer.count > 0 && buffer.count < expected && (
           <label className="flex touch-target items-center gap-3 rounded-md border p-3">
@@ -346,7 +347,7 @@ function ReceiveShipment({ transfer, onDone }: { transfer: TransferDetail; onDon
           }
           onClick={() =>
             receive.mutate(
-              { imeis: buffer.imeis, allowPartial },
+              { imeis: buffer.codes, allowPartial },
               {
                 onSuccess: (result) => {
                   if (result.missing > 0) {

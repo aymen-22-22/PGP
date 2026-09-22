@@ -5,10 +5,12 @@ import {
   ClipboardCheck,
   Coins,
   FileClock,
+  Inbox,
   LayoutDashboard,
   Mail,
   Package,
   ScanLine,
+  SendHorizontal,
   ShoppingCart,
   Tag,
   Truck,
@@ -53,6 +55,7 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'nav.section.inbound',
     items: [
       { to: '/purchases', label: 'nav.purchases', icon: ShoppingCart },
+      { to: '/receive', label: 'nav.receive', icon: Inbox },
       { to: '/receipts', label: 'nav.receipts', icon: ClipboardCheck },
       { to: '/costs', label: 'nav.costs', icon: Coins },
     ],
@@ -60,6 +63,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: 'nav.section.distribution',
     items: [
+      { to: '/send', label: 'nav.send', icon: SendHorizontal },
       { to: '/transfers', label: 'nav.transfers', icon: Truck },
     ],
   },
@@ -86,7 +90,7 @@ export const NAV_SECTIONS: NavSection[] = [
 ];
 
 /** Pages a warehouse user has no business on — the API refuses them anyway. */
-const ADMIN_ONLY_PAGES = ['/suppliers', '/costs', '/prices'];
+const ADMIN_ONLY_PAGES = ['/suppliers', '/costs', '/prices', '/pos', '/sales'];
 
 /** The sections this user may actually open, with empty sections dropped. */
 export function navigationFor(user: AuthUser | null): NavSection[] {
@@ -126,10 +130,9 @@ export function navigationExcluding(user: AuthUser | null, exclude: string[]): N
 export const sellsAtCounter = (user: AuthUser | null): boolean => user?.countryCode === 'DZ';
 
 /** The five destinations on the phone's bottom bar, for this user. */
-export const bottomTabsFor = (user: AuthUser | null): string[] => [
-  '/purchases',
-  sellsAtCounter(user) ? '/pos' : '/sales',
-  '/scan',
-  '/transfers',
-  '/stock',
-];
+export const bottomTabsFor = (user: AuthUser | null): string[] =>
+  isAdmin(user)
+    ? ['/purchases', sellsAtCounter(user) ? '/pos' : '/sales', '/scan', '/transfers', '/stock']
+    : // Stock in and stock out either side of the scanner: a warehouse account
+      // does not buy or sell, so Purchases and Sales are not on its bar at all.
+      ['/send', '/receive', '/scan', '/stock', '/'];

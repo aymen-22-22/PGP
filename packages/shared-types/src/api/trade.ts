@@ -23,7 +23,8 @@ export interface PurchaseListItem<TDate = string> {
   number: string;
   status: PurchaseStatus;
   currency: Currency;
-  totalAmount: string;
+  /** Redacted for a non-admin account — the price is admin-only information. */
+  totalAmount?: string;
   purchaseDate: TDate;
   supplier: NamedRef;
   warehouse: NamedRef;
