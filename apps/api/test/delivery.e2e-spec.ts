@@ -1,6 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { Fixture, as, createTestApp, login, seedFixture } from './helpers';
+import { Fixture, as, createTestApp, login, receiveDevices, seedFixture } from './helpers';
 
 /**
  * Transport companies and drivers: who a picker names on a Send, never
@@ -78,6 +78,9 @@ describe('Delivery companies and drivers', () => {
       .post('/api/v1/delivery/drivers')
       .send({ name: 'Ahmed', companyId: company.body.id })
       .expect(201);
+
+    // Stock to actually pick — a bare fixture has nothing in central to autoFill with.
+    await receiveDevices(app, admin, fixture, 1);
 
     const transfer = await as(app, admin)
       .post('/api/v1/transfers')
