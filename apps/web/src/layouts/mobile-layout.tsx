@@ -1,6 +1,16 @@
-import { Banknote, BarChart3, Home, MoreHorizontal, Package, ScanLine, ShoppingCart, Truck } from 'lucide-react';
+import {
+  Banknote,
+  BarChart3,
+  ClipboardCheck,
+  Home,
+  MoreHorizontal,
+  Package,
+  ScanLine,
+  ShoppingCart,
+  Truck,
+} from 'lucide-react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { useAuth } from '@/lib/auth';
+import { isAdmin, useAuth } from '@/lib/auth';
 import { useT } from '@/i18n/provider';
 import { sellsAtCounter } from '@/lib/navigation';
 import { cn } from '@/lib/utils';
@@ -31,10 +41,19 @@ const SELLING_TABS = TABS.map((tab) =>
   tab.to === '/sales' ? { to: '/pos', label: 'nav.pos', icon: Banknote } : tab,
 );
 
+/**
+ * Selling is an admin function (spec change): a warehouse account gets the
+ * receiving history in the outbound slot instead of a till or a sales list
+ * the API would refuse it anyway.
+ */
+const WAREHOUSE_TABS = TABS.map((tab) =>
+  tab.to === '/sales' ? { to: '/receipts', label: 'nav.receipts', icon: ClipboardCheck } : tab,
+);
+
 export function MobileLayout() {
   const user = useAuth((s) => s.user);
   const t = useT();
-  const tabs = sellsAtCounter(user) ? SELLING_TABS : TABS;
+  const tabs = !isAdmin(user) ? WAREHOUSE_TABS : sellsAtCounter(user) ? SELLING_TABS : TABS;
 
   return (
     <div className="flex min-h-dvh flex-col bg-background">

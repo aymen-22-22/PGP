@@ -117,8 +117,12 @@ export default function PurchasesPage() {
                       {purchase.supplier.name} → {purchase.warehouse.name}
                     </p>
                     <p className="tabular text-xs text-muted-foreground">
-                      {formatNumber(purchase.receivedQuantity)}/{formatNumber(purchase.expectedQuantity)} {t('purchases.received')} ·{' '}
-                      {money(purchase.totalAmount, purchase.currency)} · {formatDate(purchase.purchaseDate)}
+                      {formatNumber(purchase.receivedQuantity)}/{formatNumber(purchase.expectedQuantity)} {t('purchases.received')}
+                      {/* Omitted entirely for a warehouse account — pricing is admin-only. */}
+                      {purchase.totalAmount !== undefined && (
+                        <> · {money(purchase.totalAmount, purchase.currency)}</>
+                      )}{' '}
+                      · {formatDate(purchase.purchaseDate)}
                     </p>
                   </div>
                   <StatusBadge status={purchase.status} />

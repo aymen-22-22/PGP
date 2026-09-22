@@ -311,13 +311,15 @@ describe('Selling prices and the counter', () => {
       expect(res.body.message).toContain('transfer');
     });
 
-    it('keeps a cashier out of another shop’s stock', async () => {
+    it('keeps a warehouse account off the till entirely', async () => {
+      // Selling is an office function; a warehouse account may receive and
+      // move stock, but never quote a price or take a payment — not even at
+      // its own warehouse.
       const jean = await login(app, fixture.jean.email);
-      const res = await as(app, jean)
+      await as(app, jean)
         .post('/api/v1/pos/sales')
         .send({ lines: [{ imei: imeis[0] }] })
-        .expect(400);
-      expect(res.body.code).toBe('IMEI_WRONG_WAREHOUSE');
+        .expect(403);
     });
 
     it('adds up the day’s takings', async () => {

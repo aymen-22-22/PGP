@@ -16,7 +16,8 @@ interface PurchaseDetail {
   number: string;
   status: string;
   currency: string;
-  totalAmount: string;
+  /** Absent for a warehouse account — pricing is admin-only. */
+  totalAmount?: string;
   purchaseDate: string;
   notes: string | null;
   supplier: { name: string; country: string | null };
@@ -27,8 +28,8 @@ interface PurchaseDetail {
     quantity: number;
     receivedQuantity: number;
     remainingQuantity: number;
-    unitPrice: string;
-    totalPrice: string;
+    unitPrice?: string;
+    totalPrice?: string;
     product: { id: string; name: string; sku: string; tracking: 'SERIALIZED' | 'BULK' };
   }[];
   receipts: {
@@ -57,6 +58,7 @@ export default function PurchaseDetailPage() {
   if (query.isError) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
 
   const purchase = query.data!;
+  const showPricing = purchase.totalAmount !== undefined;
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
@@ -113,8 +115,14 @@ export default function PurchaseDetailPage() {
                 <Th>{t('common.product')}</Th>
                 <Th className="text-end">{t('purchase.ordered')}</Th>
                 <Th className="text-end">{t('purchase.receivedHeader')}</Th>
-                <Th className="text-end">{t('ledger.unitPrice')}</Th>
-                <Th className="text-end">{t('common.total')}</Th>
+                {/* Pricing is admin-only — the API omits it entirely for a
+                    warehouse account, so these columns have nothing to show. */}
+                {showPricing && (
+                  <>
+                    <Th className="text-end">{t('ledger.unitPrice')}</Th>
+                    <Th className="text-end">{t('common.total')}</Th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -123,16 +131,22 @@ export default function PurchaseDetailPage() {
                   <Td className="max-w-[14rem] truncate font-medium">{item.product.name}</Td>
                   <Td className="tabular text-end">{formatNumber(item.quantity)}</Td>
                   <Td className="tabular text-end font-semibold">{formatNumber(item.receivedQuantity)}</Td>
-                  <Td className="tabular text-end">{money(item.unitPrice, purchase.currency)}</Td>
-                  <Td className="tabular text-end">{money(item.totalPrice, purchase.currency)}</Td>
+                  {showPricing && (
+                    <>
+                      <Td className="tabular text-end">{money(item.unitPrice!, purchase.currency)}</Td>
+                      <Td className="tabular text-end">{money(item.totalPrice!, purchase.currency)}</Td>
+                    </>
+                  )}
                 </Tr>
               ))}
             </tbody>
           </TableWrap>
 
-          <p className="text-end text-base font-bold">
-            {money(purchase.totalAmount, purchase.currency)}
-          </p>
+          {showPricing && (
+            <p className="text-end text-base font-bold">
+              {money(purchase.totalAmount!, purchase.currency)}
+            </p>
+          )}
         </CardContent>
       </Card>
 

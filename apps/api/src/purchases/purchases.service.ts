@@ -82,9 +82,10 @@ export class PurchasesService {
       this.prisma.purchase.count({ where }),
     ]);
 
+    const showPricing = this.access.isAdmin(user);
     const data = rows.map(({ items, ...p }) => ({
       ...p,
-      totalAmount: p.totalAmount.toFixed(2),
+      totalAmount: showPricing ? p.totalAmount.toFixed(2) : undefined,
       expectedQuantity: items.reduce((s, i) => s + i.quantity, 0),
       receivedQuantity: items.reduce((s, i) => s + i.receivedQuantity, 0),
     }));
@@ -120,13 +121,18 @@ export class PurchasesService {
     if (!purchase) throw BusinessError.notFound('Purchase', id);
     this.access.assertAccess(user, purchase.warehouseId);
 
+    // A warehouse account receives goods; what the business paid for them is
+    // not its business. Redacted here, not just hidden in the UI, so it never
+    // reaches the network tab either.
+    const showPricing = this.access.isAdmin(user);
+
     return {
       ...purchase,
-      totalAmount: purchase.totalAmount.toFixed(2),
+      totalAmount: showPricing ? purchase.totalAmount.toFixed(2) : undefined,
       items: purchase.items.map((i) => ({
         ...i,
-        unitPrice: i.unitPrice.toFixed(2),
-        totalPrice: i.totalPrice.toFixed(2),
+        unitPrice: showPricing ? i.unitPrice.toFixed(2) : undefined,
+        totalPrice: showPricing ? i.totalPrice.toFixed(2) : undefined,
         remainingQuantity: i.quantity - i.receivedQuantity,
       })),
     };

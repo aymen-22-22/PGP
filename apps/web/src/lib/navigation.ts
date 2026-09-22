@@ -86,7 +86,7 @@ export const NAV_SECTIONS: NavSection[] = [
 ];
 
 /** Pages a warehouse user has no business on — the API refuses them anyway. */
-const ADMIN_ONLY_PAGES = ['/suppliers', '/costs', '/prices'];
+const ADMIN_ONLY_PAGES = ['/suppliers', '/costs', '/prices', '/pos', '/sales'];
 
 /** The sections this user may actually open, with empty sections dropped. */
 export function navigationFor(user: AuthUser | null): NavSection[] {
@@ -128,7 +128,9 @@ export const sellsAtCounter = (user: AuthUser | null): boolean => user?.countryC
 /** The five destinations on the phone's bottom bar, for this user. */
 export const bottomTabsFor = (user: AuthUser | null): string[] => [
   '/purchases',
-  sellsAtCounter(user) ? '/pos' : '/sales',
+  // Selling is an admin function; a warehouse account gets the receiving
+  // history in that slot instead of a till or a sales list it cannot open.
+  isAdmin(user) ? (sellsAtCounter(user) ? '/pos' : '/sales') : '/receipts',
   '/scan',
   '/transfers',
   '/stock',
