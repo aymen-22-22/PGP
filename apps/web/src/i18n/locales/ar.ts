@@ -393,6 +393,7 @@ const ar: Record<string, string> = {
   'send.sent_other': 'أُرسل {number} مع {count} وحدة — في الترانزيت الآن.',
   'labels.generate': 'ملصقات الوحدات',
   'labels.print': 'طباعة',
+  'labels.size': 'حجم الملصق',
   'labels.loading': 'جارٍ تحميل الملصقات',
   'labels.none': 'لا توجد ملصقات بعد',
   'labels.noneBody': 'احجز ملصقًا لكل وحدة من أمر الشراء.',

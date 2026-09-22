@@ -343,6 +343,7 @@ const fr: Record<string, string> = {
   'send.sent_other': '{number} envoyé avec {count} unités — en transit.',
   'labels.generate': 'Étiquettes unitaires',
   'labels.print': 'Imprimer',
+  'labels.size': 'Taille d’étiquette',
   'labels.loading': 'Chargement des étiquettes',
   'labels.none': 'Aucune étiquette',
   'labels.noneBody': "Réservez-en une par unité depuis le bon de commande.",

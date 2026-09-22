@@ -347,6 +347,7 @@ const en = {
   'send.sent_other': '{number} sent with {count} units — now in transit.',
   'labels.generate': 'Unit labels',
   'labels.print': 'Print',
+  'labels.size': 'Label size',
   'labels.loading': 'Loading labels',
   'labels.none': 'No labels yet',
   'labels.noneBody': 'Reserve one for each unit from the purchase order.',
