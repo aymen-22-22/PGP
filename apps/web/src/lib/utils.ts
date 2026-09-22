@@ -54,6 +54,15 @@ export function formatImei(imei: string): string {
   return imei.length === 15 ? `${imei.slice(0, 8)} ${imei.slice(8)}` : imei;
 }
 
+/**
+ * A scanned code as it should read on screen.
+ *
+ * What identifies a unit is now either an IMEI or a printed label, and only
+ * the former wants its digits grouped — `UL-2026-000123` is already readable
+ * and splitting it would be nonsense.
+ */
+export const formatScanCode = formatImei;
+
 export function titleCase(value: string): string {
   return value
     .toLowerCase()

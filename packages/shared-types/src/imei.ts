@@ -167,9 +167,19 @@ export function extractImei(payload: string, opts: { requireChecksum?: boolean }
 
 export type BarcodeClassification =
   | { kind: 'IMEI'; imei: string }
+  | { kind: 'LABEL'; code: string }
   | { kind: 'SERIAL'; serial: string }
   | { kind: 'EAN'; digits: string; eanType: 'EAN' | 'UPC' }
   | { kind: 'OTHER'; raw: string; reason: string };
+
+/**
+ * A unit label reserved at purchase time — `UL-2026-000123`.
+ *
+ * The dashes are optional on the way in, because a scanner or a typist may
+ * drop them, but the match is anchored: only this exact shape qualifies, so
+ * an ordinary serial that happens to start with "UL" is still a serial.
+ */
+const UNIT_LABEL = /^UL-?(\d{4})-?(\d{6})$/i;
 
 /** Prefixes that tell a raw payload is a serial or part number, before the digits. */
 const SERIAL_PREFIX = /^(s\/n|s n|sn|serial|serial no|serial#|no|noc|p\/n|pn|part#|part no|ctn|case|batch|lot)\s*[:=#-]?\s*/i;
@@ -187,6 +197,11 @@ export function classifyBarcode(payload: string): BarcodeClassification {
   // A scanner prefix (]C1, ]E0...) is framing, not part of the number.
   const body = raw.replace(/^\]\w\d?\s*/, '');
   const digits = body.replace(/\D/g, '');
+
+  // Our own label, before the serial branch would strip its dashes and turn
+  // "UL-2026-000123" into "UL2026000123" — which matches nothing.
+  const label = UNIT_LABEL.exec(body.trim());
+  if (label) return { kind: 'LABEL', code: `UL-${label[1]}-${label[2]}` };
 
   // Digits-only 12/13 run: the retail box barcode, shared by every unit of the
   // model. 13 is EAN-13, 12 is UPC-A. Letters anywhere mean a serial or part

@@ -6,16 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label, Select } from '@/components/ui/input';
 import { EmptyState, ErrorState, FormError, LoadingState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
-import { CameraScanner } from '@/features/scanner/camera-scanner';
-import { ScanInput } from '@/features/scanner/scan-input';
-import type { ScanOutcome } from '@/features/scanner/use-scan-buffer';
+import { CodeScanInput } from '@/features/scanner/code-scan-input';
+import type { CodeOutcome } from '@/features/scanner/use-code-buffer';
 import { useApiMutation, useApiQuery } from '@/hooks/use-api';
-import { extractImei } from '@phone-erp/shared-types';
-import { explainNonImei } from '@/features/scanner/explain-scan';
 import { api } from '@/lib/api';
 import { useI18n } from '@/i18n/provider';
 import { isAdmin, useAuth } from '@/lib/auth';
-import { formatImei } from '@/lib/utils';
+import { formatScanCode } from '@/lib/utils';
 
 interface LookupResult {
   imei: string;
@@ -88,7 +85,7 @@ export default function PosPage() {
   const toast = useToast();
   const user = useAuth((s) => s.user);
   const [basket, setBasket] = useState<BasketLine[]>([]);
-  const [outcome, setOutcome] = useState<ScanOutcome | null>(null);
+  const [outcome, setOutcome] = useState<CodeOutcome | null>(null);
   const [rejected, setRejected] = useState<string | null>(null);
   const [customerId, setCustomerId] = useState('');
   const [busy, setBusy] = useState(false);
@@ -147,18 +144,14 @@ export default function PosPage() {
   const scan = async (payload: string) => {
     setRejected(null);
 
-    // The camera reports whatever it read. Decide here, so scanning the wrong
-    // barcode on a box says which barcode it was instead of going quiet.
-    const imei = extractImei(payload);
-    if (!imei) {
-      const why = explainNonImei(payload, t);
-      setOutcome({ kind: 'stray', imei: payload, reason: why });
-      setRejected(why);
-      return;
-    }
+    // Whatever was read goes to the server as-is: a printed unit label, or a
+    // legacy IMEI. Only the server knows which codes exist, and guessing here
+    // is what used to make a perfectly good label look like a broken scanner.
+    const imei = payload.trim().toUpperCase();
+    if (!imei) return;
 
     if (basket.some((l) => l.imei === imei)) {
-      setOutcome({ kind: 'duplicate', imei });
+      setOutcome({ kind: 'duplicate', code: imei });
       return;
     }
     try {
@@ -167,11 +160,11 @@ export default function PosPage() {
         ...(admin && tillId ? { warehouseId: tillId } : {}),
       });
       if (!result.sellable || !result.device || !result.price) {
-        setOutcome({ kind: 'stray', imei, reason: result.message ?? t('pos.cannotSellHere') });
+        setOutcome({ kind: 'stray', code: imei, reason: result.message ?? t('pos.cannotSellHere') });
         setRejected(result.message ?? t('pos.cannotSellHere'));
         return;
       }
-      setOutcome({ kind: 'accepted', imei });
+      setOutcome({ kind: 'accepted', code: imei });
       setBasket((current) => [
         ...current,
         {
@@ -182,7 +175,7 @@ export default function PosPage() {
         },
       ]);
     } catch {
-      setOutcome({ kind: 'stray', imei, reason: t('pos.offline') });
+      setOutcome({ kind: 'stray', code: imei, reason: t('pos.offline') });
       setRejected(t('pos.offline'));
     }
   };
@@ -275,8 +268,7 @@ export default function PosPage() {
       {(!admin || tillId) && (
       <Card>
         <CardContent className="space-y-4 p-4 sm:p-5">
-          <ScanInput onScan={scan} outcome={outcome} label={t('pos.scanPhone')} />
-          <CameraScanner onDetect={scan} />
+          <CodeScanInput onScan={scan} outcome={outcome} label={t('pos.scanPhone')} />
           {rejected && (
             <div
               role="alert"
@@ -355,7 +347,7 @@ export default function PosPage() {
               {basket.map((line) => (
                 <li key={line.imei} className="flex items-center gap-3 px-3 py-2.5">
                   <div className="min-w-0 flex-1">
-                    <p className="tabular font-medium">{formatImei(line.imei)}</p>
+                    <p className="tabular font-medium">{formatScanCode(line.imei)}</p>
                     <p className="truncate text-xs text-muted-foreground">{line.productName}</p>
                   </div>
                   <span className="tabular font-semibold">
@@ -527,7 +519,7 @@ function ReceiptView({ receipt, onNext }: { receipt: Record<string, unknown>; on
               line.imeis.length > 0
                 ? line.imeis.map((imei) => (
                     <li key={imei} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-                      <span className="tabular">{formatImei(imei)}</span>
+                      <span className="tabular">{formatScanCode(imei)}</span>
                       <span className="tabular font-medium">{money(line.unitPrice, currency)}</span>
                     </li>
                   ))

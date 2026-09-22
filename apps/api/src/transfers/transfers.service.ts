@@ -20,6 +20,7 @@ import { BusinessError } from '../common/errors/business.error';
 import { normalizeScanCodes } from '../common/pipes/imei.util';
 import { DocumentNumberService } from '../common/services/document-number.service';
 import { MovementService } from '../common/services/movement.service';
+import { DeviceScanService } from '../common/services/device-scan.service';
 import { WarehouseAccessService } from '../common/services/warehouse-access.service';
 import { APP_CONFIG } from '../common/tokens';
 import type { RequestUser } from '../common/types';
@@ -53,6 +54,7 @@ export class TransfersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: WarehouseAccessService,
+    private readonly deviceScan: DeviceScanService,
     private readonly numbers: DocumentNumberService,
     private readonly movements: MovementService,
     private readonly stock: StockService,
@@ -257,45 +259,13 @@ export class TransfersService {
    * stored and scanned again at receive time — not the device's own IMEI,
    * which may not exist.
    */
-  private async resolveDevicesByScanCode(codes: string[]): Promise<{
-    resolved: { device: { id: string; imei: string | null; status: DeviceStatus; currentWarehouseId: string | null; productId: string }; code: string }[];
-    missing: string[];
-  }> {
-    if (codes.length === 0) return { resolved: [], missing: [] };
-
-    const byImei = await this.prisma.device.findMany({
-      where: { imei: { in: codes } },
-      select: { id: true, imei: true, status: true, currentWarehouseId: true, productId: true },
-    });
-    const matchedCodes = new Set(byImei.map((d) => d.imei as string));
-    const remaining = codes.filter((c) => !matchedCodes.has(c));
-
-    const resolved = byImei.map((device) => ({ device, code: device.imei as string }));
-
-    if (remaining.length > 0) {
-      const labels = await this.prisma.purchaseUnitLabel.findMany({
-        where: { code: { in: remaining }, deviceId: { not: null } },
-        select: {
-          code: true,
-          device: { select: { id: true, imei: true, status: true, currentWarehouseId: true, productId: true } },
-        },
-      });
-      for (const label of labels) {
-        if (label.device) resolved.push({ device: label.device, code: label.code });
-      }
-    }
-
-    const resolvedCodes = new Set(resolved.map((r) => r.code));
-    const missing = codes.filter((c) => !resolvedCodes.has(c));
-    return { resolved, missing };
-  }
 
   /** Attaches specific scanned devices to an open transfer. */
   async loadDevices(user: RequestUser, transferId: string, dto: LoadDevicesDto) {
     const transfer = await this.mustBeEditable(user, transferId);
     const codes = normalizeScanCodes(dto.imeis ?? []);
 
-    const { resolved, missing } = await this.resolveDevicesByScanCode(codes);
+    const { resolved, missing } = await this.deviceScan.resolve(codes);
     if (missing.length > 0) {
       throw new BusinessError(ErrorCode.IMEI_NOT_FOUND, `${missing.length} code(s) are unknown.`, 404, {
         imeis: missing.slice(0, 20),

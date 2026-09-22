@@ -7,6 +7,20 @@ describe('classifyBarcode', () => {
     expect(classifyBarcode('35305510-14080-9')).toEqual({ kind: 'IMEI', imei: '353055101408091' });
   });
 
+  it('tags our own unit label as LABEL, dashes or not', () => {
+    expect(classifyBarcode('UL-2026-000123')).toEqual({ kind: 'LABEL', code: 'UL-2026-000123' });
+    expect(classifyBarcode('ul-2026-000123')).toEqual({ kind: 'LABEL', code: 'UL-2026-000123' });
+    // A scanner that drops the dashes still resolves to the printed code.
+    expect(classifyBarcode('UL2026000123')).toEqual({ kind: 'LABEL', code: 'UL-2026-000123' });
+    expect(classifyBarcode(']C1UL-2026-000123')).toEqual({ kind: 'LABEL', code: 'UL-2026-000123' });
+  });
+
+  it('leaves a serial that merely starts with UL alone', () => {
+    // Anchored on purpose: only the exact UL-YYYY-NNNNNN shape is a label.
+    expect(classifyBarcode('ULTRA-99')).toEqual({ kind: 'SERIAL', serial: 'ULTRA99' });
+    expect(classifyBarcode('UL-2026-00012')).toEqual({ kind: 'SERIAL', serial: 'UL202600012' });
+  });
+
   it('tags a serial/part code as SERIAL even when it embeds digits', () => {
     expect(classifyBarcode('S/N:2UKBB25506101197')).toEqual({ kind: 'SERIAL', serial: '2UKBB25506101197' });
     expect(classifyBarcode('2UKBB25506101197')).toEqual({ kind: 'SERIAL', serial: '2UKBB25506101197' });

@@ -16,6 +16,16 @@ export interface NormalizedImeiList {
  * rejecting an unrecognised code happens at resolution, with a message that
  * can say what was actually typed rather than "not a valid IMEI".
  */
+/**
+ * One scanned code, trimmed and upper-cased — no format assumed.
+ *
+ * The singular counterpart to {@link normalizeScanCodes}: whether the string
+ * names a real unit is for the resolver to say, not this.
+ */
+export function scanCode(raw: string): string {
+  return (raw ?? '').trim().toUpperCase();
+}
+
 export function normalizeScanCodes(raw: string[]): string[] {
   const seen = new Set<string>();
   const duplicates: string[] = [];
@@ -119,6 +129,13 @@ export function normalizeSerialBatch(raw: string[]): string[] {
       throw new BusinessError(
         ErrorCode.VALIDATION_FAILED,
         `"${value}" is a ${cls.eanType} product barcode, not a serial number.`,
+        400,
+      );
+    }
+    if (cls.kind === 'LABEL') {
+      throw new BusinessError(
+        ErrorCode.VALIDATION_FAILED,
+        `"${value}" is a printed unit label — receive it by scanning the label, not as a serial number.`,
         400,
       );
     }

@@ -135,7 +135,7 @@ export default function HomePage() {
           tone="warning"
           icon={Truck}
           sub={t('home.sendSub')}
-          to="/movements?direction=sending"
+          to="/send"
         />
         <Stat
           label={t('home.receive')}
@@ -143,7 +143,7 @@ export default function HomePage() {
           tone="warning"
           icon={ArrowDownToLine}
           sub={t('home.receiveSub')}
-          to="/movements"
+          to="/receive"
         />
       </StatGrid>
 
@@ -230,7 +230,7 @@ export default function HomePage() {
           </CardHeader>
           <CardContent className="grid gap-2">
             <Button asChild variant="outline" size="lg" className="justify-between">
-              <Link to="/movements">
+              <Link to="/receive">
                 {t('home.incomingShipments')}
                 <span className="tabular font-bold">{formatNumber(movement.incoming)}</span>
               </Link>
@@ -241,10 +241,12 @@ export default function HomePage() {
                 <span className="tabular font-bold">{formatNumber(totals.available)}</span>
               </Link>
             </Button>
+            {/* Not Sales: this account cannot open it, and what it actually
+                does with stock on the way out is send it. */}
             <Button asChild variant="outline" size="lg" className="justify-between">
-              <Link to="/sales">
-                {t('nav.sales')}
-                <span className="tabular font-bold">{formatNumber(financials.completedSales)}</span>
+              <Link to="/send">
+                {t('nav.send')}
+                <span className="tabular font-bold">{formatNumber(movement.outgoing)}</span>
               </Link>
             </Button>
           </CardContent>
