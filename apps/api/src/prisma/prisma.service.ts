@@ -34,7 +34,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         "CostEntry","CostDocument","ProductPrice","ReceiptLine","Receipt","ReturnItem","Return",
         "DeviceMovement","StockMovement","StockLevel","TransferDevice","TransferItem","Shipment","Transfer","SaleItem","Sale",
         "PurchaseUnitLabel","Device","Lot","PurchaseItem","Purchase","AuditLog","Product","Supplier","Customer","User",
-        "CostCenter","Warehouse","Country","DocumentCounter","Brand","Notification","ExchangeRate"
+        "CostCenter","Warehouse","Country","DocumentCounter","Brand","Notification","ExchangeRate","Driver","DeliveryCompany"
       RESTART IDENTITY CASCADE;
     `);
   }
