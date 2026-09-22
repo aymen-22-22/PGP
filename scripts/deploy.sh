@@ -11,7 +11,7 @@
 #   ./scripts/deploy.sh                      # API and web
 #   WEB_ROOT=~/example.com ./scripts/deploy.sh
 #   ./scripts/deploy.sh --skip-web           # API only
-#   ./scripts/deploy.sh --keep-dev           # leave devDependencies installed
+#   ./scripts/deploy.sh --prune              # drop devDependencies afterwards
 #
 # The build writes over the directories the running application serves from,
 # so a build that dies halfway — and on shared hosting it dies for memory —
@@ -25,12 +25,20 @@ cd "$ROOT"
 
 WEB_ROOT="${WEB_ROOT:-}"
 SKIP_WEB=0
-KEEP_DEV=0
+# Pruning is opt-in. It saves a couple of hundred megabytes of disk and, on at
+# least one host, takes node_modules/.prisma with it — the generated client,
+# which is not a package and so is not protected from a prune. The application
+# then dies on its next restart with "Cannot find module '.prisma/client'", and
+# the obvious repair is unavailable because prisma is itself a devDependency
+# that the prune has just removed. Disk is cheaper than that.
+PRUNE=0
 
 for arg in "$@"; do
   case "$arg" in
     --skip-web) SKIP_WEB=1 ;;
-    --keep-dev) KEEP_DEV=1 ;;
+    --prune) PRUNE=1 ;;
+    # Accepted and ignored: keeping devDependencies is now the default.
+    --keep-dev) ;;
     -h|--help) sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "deploy: unknown option $arg" >&2; exit 2 ;;
   esac
@@ -123,13 +131,14 @@ NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=512}" npm run build
 trap - ERR
 for d in "${DISTS[@]}"; do rm -rf "$d.prev"; done
 
-if [ "$KEEP_DEV" -eq 0 ]; then
+if [ "$PRUNE" -eq 1 ]; then
   say "Removing devDependencies"
   npm prune --omit=dev
-  # The generated client lives inside node_modules and is not a package, so
-  # confirm the prune has not taken it with the rest.
+  # The generated client lives inside node_modules without being a package, so
+  # a prune can take it. Regenerating needs the prisma CLI, which the prune has
+  # also just removed, so the way back is a deploy without --prune.
   node -e "require('@prisma/client')" ||
-    die "the prune removed the generated Prisma client — run: npx prisma generate --schema apps/api/prisma/schema.prisma"
+    die "the prune removed the generated Prisma client. Re-run this deploy without --prune; regenerating is not possible now, because prisma is a devDependency the prune has taken as well."
 fi
 
 if [ "$SKIP_WEB" -eq 0 ]; then

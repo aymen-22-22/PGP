@@ -77,21 +77,37 @@ the server. The Docker database in `docker-compose.yml` stays where it is, for
 development.
 
 Neon issues two connection strings for the same database, differing only in the
-hostname:
+hostname: a **pooled** one, whose host carries `-pooler`, and a **direct** one
+without it. The pooled endpoint routes through PgBouncer in transaction mode,
+which holds no session state between statements.
 
-| | Host | Use for |
-|---|---|---|
-| **Pooled** | `ep-….<region>.aws.neon.tech` with `-pooler` | The API's `DATABASE_URL`. |
-| **Direct** | the same host without `-pooler` | `pg_dump`, `pg_restore`, logical replication, and anything relying on session state. |
+**Use the direct string**, unless you have a reason not to:
 
-The pooled endpoint routes through PgBouncer in transaction mode, which holds no
-session state between statements. That is right for the API, which opens a
-connection per request, and wrong for tools that expect a session to persist —
-those fail in ways that never mention pooling, such as `prepared statement "s0"
-already exists` or a `SET` that silently does not survive its own transaction.
+```env
+DATABASE_URL=postgresql://user:pass@ep-….<region>.aws.neon.tech/db?sslmode=require&schema=public&connection_limit=5
+```
 
-Keep the `?sslmode=require` the console gives you. Add `&connection_limit=5` if
-the API and the migration job might run at once and the compute is small.
+Pooling is what you reach for when connection count is the constraint —
+serverless functions, or anything opening a connection per request at volume.
+This API is a single long-lived process with its own connection pool, so it
+gains little and inherits the pooler's restrictions. A deployment of this app
+ran against the pooled endpoint and showed screens holding values the database
+had already changed; moving `DATABASE_URL` to the direct endpoint fixed it. That
+is an observation rather than an explained mechanism — several variables moved
+at once — but the direct string is the safer default here either way.
+
+If you do use the pooled endpoint with Prisma, add `pgbouncer=true` to the
+query string. Prisma uses prepared statements, which transaction pooling cannot
+carry across statements, and without that flag the failures are obscure:
+`prepared statement "s0" already exists`, or a `SET` that does not survive its
+own transaction.
+
+The direct string is also the one for `pg_dump`, `pg_restore`, logical
+replication and anything else that expects a session to persist.
+
+Keep the `?sslmode=require` the console gives you. `&connection_limit=5` is
+worth setting on a small compute, so the API and a migration job running at
+once cannot exhaust it.
 
 Migrations can be applied from anywhere that can reach the database, including
 the **Neon migrate** workflow in this repository (Actions → Neon migrate),
@@ -308,8 +324,14 @@ WEB_ROOT=~/erp.example.com ./scripts/deploy.sh
 It refuses to run on a dirty working tree, keeps each `dist` until the build
 succeeds and puts it back if the build dies — which on shared hosting it does,
 for memory — and restarts through `tmp/restart.txt`, which Passenger watches.
-`--skip-web` leaves the static files alone; `--keep-dev` skips the prune, which
-is slow and only buys disk.
+`--skip-web` leaves the static files alone. `--prune` drops the
+devDependencies afterwards, and is opt-in for a reason: on at least one host
+the prune also removes `node_modules/.prisma`, the generated client, which is
+not a package and so is not protected from it. The application then dies on its
+next restart with `Cannot find module '.prisma/client'`, and the obvious repair
+is unavailable — `prisma` is itself a devDependency the prune has just taken.
+A couple of hundred megabytes of disk is cheaper than that, so keeping them is
+the default.
 
 It installs with `--ignore-scripts`, then runs `prisma generate` itself and
 checks that `argon2` and `@prisma/client` actually load before going any
