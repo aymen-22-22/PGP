@@ -94,9 +94,9 @@ describe('Delivery companies and drivers', () => {
       })
       .expect(201);
 
-    const shipped = await as(app, admin).post(`/api/v1/transfers/${transfer.body.id}/ship`).expect(200);
-    expect(shipped.body.shipment.deliveryCompanyId).toBe(company.body.id);
-    expect(shipped.body.shipment.driverId).toBe(driver.body.id);
+    // ship() returns a status summary, not the shipment row itself — the
+    // carrier is confirmed through the transfer's own detail view below.
+    await as(app, admin).post(`/api/v1/transfers/${transfer.body.id}/ship`).expect(200);
 
     const detail = await as(app, admin).get(`/api/v1/transfers/${transfer.body.id}`).expect(200);
     expect(detail.body.shipment.deliveryCompany.name).toBe('XYZ Transport');
