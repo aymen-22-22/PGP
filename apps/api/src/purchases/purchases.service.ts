@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { DeviceStatus, MovementType, Prisma, PurchaseStatus, TrackingMode } from '@prisma/client';
 import {
@@ -22,7 +22,7 @@ import { AppConfig } from '../config/configuration';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { StockService } from '../stock/stock.service';
-import { CreatePurchaseDto, QueryPurchasesDto, ReceivePurchaseDto } from './dto/purchase.dto';
+import { CreatePurchaseDto, QueryPurchasesDto, ReceiveByLabelDto, ReceivePurchaseDto } from './dto/purchase.dto';
 
 @Injectable()
 export class PurchasesService {
@@ -573,6 +573,167 @@ export class PurchasesService {
       pendingValidation: requiresValidation,
       deviceStatus,
       lotIds: result.lotIds,
+    };
+  }
+
+  /**
+   * Registers one phone into stock by scanning the label printed at PO time —
+   * the goods-in half of the label-first workflow. No IMEI is asked for: the
+   * label already proves which product and which purchase order this unit
+   * belongs to, which is the whole reason it was printed before the phone
+   * arrived.
+   *
+   * Deliberately bypasses REQUIRE_RECEIPT_VALIDATION: that gate exists to
+   * catch a mistyped IMEI on a bulk digital entry, a risk a barcode scan of a
+   * pre-printed, PO-bound label does not carry — the code itself already
+   * proves the match. Scanned units go straight to IN_STOCK.
+   */
+  async receiveByLabel(user: RequestUser, purchaseId: string, dto: ReceiveByLabelDto) {
+    const purchase = await this.prisma.purchase.findUnique({
+      where: { id: purchaseId },
+      select: { id: true, number: true, status: true, warehouseId: true, currency: true, warehouse: { select: { id: true, name: true } } },
+    });
+    if (!purchase) throw BusinessError.notFound('Purchase', purchaseId);
+    this.access.assertAccess(user, purchase.warehouseId);
+
+    if (purchase.status === PurchaseStatus.CANCELLED) {
+      throw new BusinessError(ErrorCode.VALIDATION_FAILED, 'This purchase has been cancelled.');
+    }
+
+    const code = dto.code.trim();
+    const label = await this.prisma.purchaseUnitLabel.findUnique({
+      where: { code },
+      select: {
+        id: true,
+        code: true,
+        deviceId: true,
+        receivedAt: true,
+        purchaseItemId: true,
+        purchaseItem: {
+          select: {
+            id: true,
+            purchaseId: true,
+            productId: true,
+            unitPrice: true,
+            product: { select: { id: true, name: true, sku: true, color: true, storage: true } },
+          },
+        },
+      },
+    });
+    if (!label) {
+      throw new BusinessError(
+        ErrorCode.UNRECOGNIZED_BARCODE,
+        `No label found for ${code}.`,
+        HttpStatus.NOT_FOUND,
+        { code },
+      );
+    }
+
+    if (label.purchaseItem.purchaseId !== purchase.id) {
+      const owner = await this.prisma.purchase.findUnique({
+        where: { id: label.purchaseItem.purchaseId },
+        select: { number: true },
+      });
+      throw new BusinessError(
+        ErrorCode.VALIDATION_FAILED,
+        `This label belongs to ${owner?.number ?? 'another purchase order'}, not ${purchase.number}.`,
+        400,
+        { code, purchaseNumber: owner?.number },
+      );
+    }
+
+    if (label.deviceId) {
+      throw BusinessError.conflict(
+        ErrorCode.CONFLICT,
+        label.receivedAt
+          ? `This label was already scanned on ${label.receivedAt.toLocaleString('en-GB')}.`
+          : 'This label was already scanned.',
+        { code },
+      );
+    }
+
+    const now = new Date();
+    const deviceId = randomUUID();
+    const item = label.purchaseItem;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.device.create({
+        data: {
+          id: deviceId,
+          status: DeviceStatus.IN_STOCK,
+          productId: item.productId,
+          currentWarehouseId: purchase.warehouseId,
+          purchaseId: purchase.id,
+          purchaseItemId: item.id,
+          purchaseCost: item.unitPrice,
+          landedCost: item.unitPrice,
+          costCurrency: purchase.currency,
+          receivedAt: now,
+        },
+      });
+      await tx.purchaseUnitLabel.update({
+        where: { id: label.id },
+        data: { deviceId, receivedAt: now, receivedById: user.id },
+      });
+      await tx.purchaseItem.update({
+        where: { id: item.id },
+        data: { receivedQuantity: { increment: 1 } },
+      });
+      await this.movements.record(tx, {
+        deviceId,
+        type: MovementType.PURCHASE_RECEIPT,
+        toWarehouseId: purchase.warehouseId,
+        referenceType: 'Purchase',
+        referenceId: purchase.id,
+        referenceNumber: purchase.number,
+        performedById: user.id,
+        metadata: { label: label.code },
+      });
+
+      const refreshed = await tx.purchaseItem.findMany({
+        where: { purchaseId: purchase.id },
+        select: { quantity: true, receivedQuantity: true },
+      });
+      const fullyReceived = refreshed.every((i) => i.receivedQuantity >= i.quantity);
+      const anyReceived = refreshed.some((i) => i.receivedQuantity > 0);
+      await tx.purchase.update({
+        where: { id: purchase.id },
+        data: {
+          status: fullyReceived
+            ? PurchaseStatus.RECEIVED
+            : anyReceived
+              ? PurchaseStatus.PARTIALLY_RECEIVED
+              : purchase.status,
+        },
+      });
+    });
+
+    await this.audit.log({
+      userId: user.id,
+      action: AuditAction.RECEIVE_PURCHASE,
+      entityType: 'Purchase',
+      entityId: purchase.id,
+      metadata: { purchaseNumber: purchase.number, label: label.code, deviceId },
+    });
+
+    const totals = await this.prisma.purchaseItem.aggregate({
+      where: { purchaseId: purchase.id },
+      _sum: { quantity: true, receivedQuantity: true },
+    });
+    const expected = totals._sum.quantity ?? 0;
+    const received = totals._sum.receivedQuantity ?? 0;
+
+    return {
+      code: label.code,
+      product: item.product,
+      purchase: { id: purchase.id, number: purchase.number },
+      warehouse: purchase.warehouse,
+      scannedBy: user.name,
+      scannedAt: now,
+      expected,
+      received,
+      remaining: Math.max(0, expected - received),
+      purchaseStatus: received >= expected ? PurchaseStatus.RECEIVED : PurchaseStatus.PARTIALLY_RECEIVED,
     };
   }
 

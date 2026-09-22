@@ -1,4 +1,4 @@
-import { ArrowLeft, PackageCheck, Tags } from 'lucide-react';
+import { ArrowLeft, PackageCheck, ScanLine, Tags } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { StatusBadge } from '@/components/ui/badge';
@@ -88,20 +88,30 @@ export default function PurchaseDetailPage() {
           </div>
 
           {purchase.status !== 'CANCELLED' && (
-            <Button
-              variant="outline"
-              className="w-full gap-2 sm:w-auto"
-              disabled={labels.isPending}
-              onClick={() =>
-                labels.mutate(undefined, {
-                  onSuccess: () => navigate(`/purchases/${id}/labels`),
-                  onError: (error) => toast.push('error', error.message),
-                })
-              }
-            >
-              <Tags className="h-4 w-4" />
-              {t('labels.generate')}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                className="gap-2"
+                disabled={labels.isPending}
+                onClick={() =>
+                  labels.mutate(undefined, {
+                    onSuccess: () => navigate(`/purchases/${id}/labels`),
+                    onError: (error) => toast.push('error', error.message),
+                  })
+                }
+              >
+                <Tags className="h-4 w-4" />
+                {t('labels.generate')}
+              </Button>
+              {purchase.status !== 'RECEIVED' && (
+                <Button asChild className="gap-2">
+                  <Link to={`/purchases/${id}/receive-scan`}>
+                    <ScanLine className="h-4 w-4" />
+                    {t('receiveScan.button')}
+                  </Link>
+                </Button>
+              )}
+            </div>
           )}
 
           <TableWrap className="border-x-0">
