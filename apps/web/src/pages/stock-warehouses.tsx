@@ -102,7 +102,7 @@ export default function StockWarehousesPage() {
                 <div>
                   <dt className="text-xs uppercase tracking-wide text-muted-foreground">{t('stock.stockValue')}</dt>
                   <dd className="tabular font-bold text-success">
-                    {money(warehouse.stockValue, warehouse.currency, { round: true })}
+                    {money(warehouse.stockValue!, warehouse.currency, { round: true })}
                   </dd>
                 </div>
               )}

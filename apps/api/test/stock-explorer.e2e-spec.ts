@@ -234,6 +234,51 @@ describe('Stock explorer', () => {
     });
   });
 
+  describe('what a warehouse account is never sent', () => {
+    // The client already hides these figures for a non-admin; the point here
+    // is that the API itself withholds them, so there is nothing to read off
+    // the network tab either.
+    it('omits stock value from the warehouse and category cards', async () => {
+      const [warehouses, categories] = await Promise.all([
+        as(app, jean).get('/api/v1/stock-explorer/warehouses').expect(200),
+        as(app, jean)
+          .get(`/api/v1/stock-explorer/warehouses/${fixture.france.id}/categories`)
+          .expect(200),
+      ]);
+      expect(warehouses.body.data[0].stockValue).toBeUndefined();
+      for (const category of categories.body.data) {
+        expect(category.stockValue).toBeUndefined();
+      }
+    });
+
+    it('omits unit cost and stock value from the product page', async () => {
+      // Give France something to look at.
+      const po = await as(app, admin)
+        .post('/api/v1/purchases')
+        .send({
+          supplierId: fixture.supplier.id,
+          warehouseId: fixture.france.id,
+          purchaseDate: new Date().toISOString(),
+          items: [{ productId: fixture.accessory.id, quantity: 10, unitPrice: '3.00' }],
+        })
+        .expect(201);
+      await as(app, admin)
+        .post(`/api/v1/purchases/${po.body.id}/receive`)
+        .send({ lines: [{ purchaseItemId: po.body.items[0].id, quantity: 10 }] })
+        .expect(200);
+
+      const res = await as(app, jean)
+        .get(`/api/v1/stock-explorer/warehouses/${fixture.france.id}/products/${fixture.accessory.id}`)
+        .expect(200);
+
+      expect(res.body.stock.stockValue).toBeUndefined();
+      expect(res.body.stock.unitCost).toBeUndefined();
+      expect(res.body.product.purchasePrice).toBeUndefined();
+      expect(res.body.purchases).toEqual([]);
+      expect(res.body.sales).toEqual([]);
+    });
+  });
+
   describe('the product page', () => {
     it('gathers stock, purchases and history in one answer', async () => {
       const res = await as(app, admin)

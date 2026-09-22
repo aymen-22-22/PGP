@@ -58,6 +58,7 @@ export class StockExplorerService {
 
   /** The warehouses this user may actually open. */
   async warehouses(user: RequestUser): Promise<WarehouseStockCards> {
+    const admin = this.access.isAdmin(user);
     const allowed = this.access.allowedWarehouseIds(user);
 
     const warehouses = await this.prisma.warehouse.findMany({
@@ -137,7 +138,7 @@ export class StockExplorerService {
         products: b?.products.size ?? 0,
         categories: b?.categories.size ?? 0,
         quantity: b?.quantity ?? 0,
-        stockValue: b?.value ?? '0.00',
+        stockValue: admin ? (b?.value ?? '0.00') : undefined,
         currency: 'EUR' as const,
       };
     });
@@ -147,6 +148,7 @@ export class StockExplorerService {
 
   /** The categories actually holding stock in one warehouse. */
   async categories(user: RequestUser, warehouseId: string): Promise<BrandStockCards> {
+    const admin = this.access.isAdmin(user);
     const warehouse = await this.assertWarehouse(user, warehouseId);
 
     const { rows } = await this.stockRows(warehouseId);
@@ -170,17 +172,20 @@ export class StockExplorerService {
         category,
         products: b.products.size,
         quantity: b.quantity,
-        stockValue: b.value,
+        stockValue: admin ? b.value : undefined,
         imageUrl: b.image,
         currency: 'EUR' as const,
+        sortValue: b.value,
       }))
-      .sort((a, b) => Number(b.stockValue) - Number(a.stockValue));
+      .sort((a, b) => Number(b.sortValue) - Number(a.sortValue))
+      .map(({ sortValue: _sortValue, ...card }) => card);
 
     return { warehouse, data, meta: { total: data.length } };
   }
 
   /** The products of one category, in one warehouse. */
   async products(user: RequestUser, warehouseId: string, category: string): Promise<ProductStockCards> {
+    const admin = this.access.isAdmin(user);
     const warehouse = await this.assertWarehouse(user, warehouseId);
     const { rows } = await this.stockRows(warehouseId);
 
@@ -225,7 +230,8 @@ export class StockExplorerService {
         sold: soldByProduct.get(row.productId) ?? 0,
         status: stockStatus(row.quantity),
       }))
-      .sort((a, b) => Number(b.stockValue) - Number(a.stockValue));
+      .sort((a, b) => Number(b.stockValue) - Number(a.stockValue))
+      .map((row) => (admin ? row : { ...row, unitCost: undefined, stockValue: undefined }));
 
     return { warehouse, category, data, meta: { total: data.length } };
   }
@@ -239,6 +245,7 @@ export class StockExplorerService {
    * same records those screens read.
    */
   async product360(user: RequestUser, warehouseId: string, productId: string): Promise<Product360> {
+    const admin = this.access.isAdmin(user);
     const warehouse = await this.assertWarehouse(user, warehouseId);
 
     const product = await this.prisma.product.findUnique({
@@ -394,7 +401,7 @@ export class StockExplorerService {
       warehouse,
       product: {
         ...product,
-        purchasePrice: product.purchasePrice.toFixed(2),
+        purchasePrice: admin ? product.purchasePrice.toFixed(2) : undefined,
         defaultSalePrice: product.defaultSalePrice.toFixed(2),
         // The browser groups by make, so that is what "category" means here.
         category: product.brand.name,
@@ -409,10 +416,12 @@ export class StockExplorerService {
         returned: serialised ? countOf(DeviceStatus.RETURNED) : 0,
         damaged: serialised ? countOf(DeviceStatus.DAMAGED) : 0,
         lost: serialised ? countOf(DeviceStatus.LOST) : 0,
-        stockValue,
-        unitCost: serialised
-          ? money(available > 0 ? new Prisma.Decimal(stockValue).dividedBy(available) : ZERO)
-          : money(level?.avgUnitCost ?? ZERO),
+        stockValue: admin ? stockValue : undefined,
+        unitCost: admin
+          ? serialised
+            ? money(available > 0 ? new Prisma.Decimal(stockValue).dividedBy(available) : ZERO)
+            : money(level?.avgUnitCost ?? ZERO)
+          : undefined,
         currency: 'EUR' as const,
         status: stockStatus(available),
         countedAt: level?.updatedAt?.toISOString() ?? null,
@@ -432,36 +441,42 @@ export class StockExplorerService {
         // whole product page trying to format it.
         imei: d.imei,
         label: d.label ? { code: d.label.code } : null,
-        landedCost: d.landedCost?.toFixed(2) ?? null,
+        landedCost: admin ? (d.landedCost?.toFixed(2) ?? null) : undefined,
         receivedAt: d.receivedAt?.toISOString() ?? null,
       })),
-      purchases: purchaseLines.map((line) => ({
-        purchaseId: line.purchase.id,
-        number: line.purchase.number,
-        status: line.purchase.status,
-        date: line.purchase.purchaseDate.toISOString(),
-        supplier: line.purchase.supplier.name,
-        ordered: line.quantity,
-        received: line.receivedQuantity,
-        unitPrice: line.unitPrice.toFixed(2),
-        totalPrice: line.totalPrice.toFixed(2),
-        currency: line.purchase.currency,
-      })),
-      sales: saleLines.map((line) => {
-        const cost = line.devices.reduce((sum, d) => sum.plus(d.landedCost ?? ZERO), ZERO);
-        return {
-          saleId: line.sale.id,
-          number: line.sale.number,
-          date: line.sale.completedAt?.toISOString() ?? null,
-          channel: line.sale.channel,
-          customer: line.sale.customer?.name ?? null,
-          quantity: line.quantity,
-          unitPrice: line.unitPrice.toFixed(2),
-          totalPrice: line.totalPrice.toFixed(2),
-          currency: line.sale.currency,
-          cost: money(cost),
-        };
-      }),
+      // Costing detail is office information — a non-admin request never sees
+      // this section on screen, so the API sends nothing to see in the network tab either.
+      purchases: admin
+        ? purchaseLines.map((line) => ({
+            purchaseId: line.purchase.id,
+            number: line.purchase.number,
+            status: line.purchase.status,
+            date: line.purchase.purchaseDate.toISOString(),
+            supplier: line.purchase.supplier.name,
+            ordered: line.quantity,
+            received: line.receivedQuantity,
+            unitPrice: line.unitPrice.toFixed(2),
+            totalPrice: line.totalPrice.toFixed(2),
+            currency: line.purchase.currency,
+          }))
+        : [],
+      sales: admin
+        ? saleLines.map((line) => {
+            const cost = line.devices.reduce((sum, d) => sum.plus(d.landedCost ?? ZERO), ZERO);
+            return {
+              saleId: line.sale.id,
+              number: line.sale.number,
+              date: line.sale.completedAt?.toISOString() ?? null,
+              channel: line.sale.channel,
+              customer: line.sale.customer?.name ?? null,
+              quantity: line.quantity,
+              unitPrice: line.unitPrice.toFixed(2),
+              totalPrice: line.totalPrice.toFixed(2),
+              currency: line.sale.currency,
+              cost: money(cost),
+            };
+          })
+        : [],
       movements: [
         ...movements.map((m) => ({
           id: m.id,
