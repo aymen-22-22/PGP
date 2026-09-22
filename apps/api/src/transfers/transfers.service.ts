@@ -17,7 +17,7 @@ import {
 import { AuditService } from '../audit/audit.service';
 import { paginate } from '../common/dto/pagination.dto';
 import { BusinessError } from '../common/errors/business.error';
-import { normalizeImeiBatch } from '../common/pipes/imei.util';
+import { normalizeScanCodes } from '../common/pipes/imei.util';
 import { DocumentNumberService } from '../common/services/document-number.service';
 import { MovementService } from '../common/services/movement.service';
 import { WarehouseAccessService } from '../common/services/warehouse-access.service';
@@ -248,23 +248,61 @@ export class TransfersService {
     return this.findOne(user, transfer.id);
   }
 
+  /**
+   * Resolves scanned codes to devices, trying each as an IMEI first (legacy
+   * stock, still supported) and falling back to a printed unit label's code —
+   * the only thing goods received through the label-first workflow ever
+   * carries, since that path never asks for an IMEI. Returns each resolved
+   * device paired with the exact code that found it, since that is what gets
+   * stored and scanned again at receive time — not the device's own IMEI,
+   * which may not exist.
+   */
+  private async resolveDevicesByScanCode(codes: string[]): Promise<{
+    resolved: { device: { id: string; imei: string | null; status: DeviceStatus; currentWarehouseId: string | null; productId: string }; code: string }[];
+    missing: string[];
+  }> {
+    if (codes.length === 0) return { resolved: [], missing: [] };
+
+    const byImei = await this.prisma.device.findMany({
+      where: { imei: { in: codes } },
+      select: { id: true, imei: true, status: true, currentWarehouseId: true, productId: true },
+    });
+    const matchedCodes = new Set(byImei.map((d) => d.imei as string));
+    const remaining = codes.filter((c) => !matchedCodes.has(c));
+
+    const resolved = byImei.map((device) => ({ device, code: device.imei as string }));
+
+    if (remaining.length > 0) {
+      const labels = await this.prisma.purchaseUnitLabel.findMany({
+        where: { code: { in: remaining }, deviceId: { not: null } },
+        select: {
+          code: true,
+          device: { select: { id: true, imei: true, status: true, currentWarehouseId: true, productId: true } },
+        },
+      });
+      for (const label of labels) {
+        if (label.device) resolved.push({ device: label.device, code: label.code });
+      }
+    }
+
+    const resolvedCodes = new Set(resolved.map((r) => r.code));
+    const missing = codes.filter((c) => !resolvedCodes.has(c));
+    return { resolved, missing };
+  }
+
   /** Attaches specific scanned devices to an open transfer. */
   async loadDevices(user: RequestUser, transferId: string, dto: LoadDevicesDto) {
     const transfer = await this.mustBeEditable(user, transferId);
-    const imeis = normalizeImeiBatch(dto.imeis ?? [], this.config.imei.enforceChecksum);
+    const codes = normalizeScanCodes(dto.imeis ?? []);
 
-    const devices = await this.prisma.device.findMany({
-      where: { imei: { in: imeis } },
-      select: { id: true, imei: true, status: true, currentWarehouseId: true, productId: true },
-    });
-
-    const found = new Map(devices.map((d) => [d.imei, d]));
-    const missing = imeis.filter((i) => !found.has(i));
+    const { resolved, missing } = await this.resolveDevicesByScanCode(codes);
     if (missing.length > 0) {
-      throw new BusinessError(ErrorCode.IMEI_NOT_FOUND, `${missing.length} IMEI(s) are unknown.`, 404, {
+      throw new BusinessError(ErrorCode.IMEI_NOT_FOUND, `${missing.length} code(s) are unknown.`, 404, {
         imeis: missing.slice(0, 20),
       });
     }
+    const devices = resolved.map((r) => r.device);
+    const codeByDeviceId = new Map(resolved.map((r) => [r.device.id, r.code]));
 
     const wrongWarehouse = devices.filter((d) => d.currentWarehouseId !== transfer.sourceWarehouseId);
     if (wrongWarehouse.length > 0) {
@@ -272,7 +310,7 @@ export class TransfersService {
         ErrorCode.IMEI_WRONG_WAREHOUSE,
         `${wrongWarehouse.length} phone(s) are not in the source warehouse.`,
         400,
-        { imeis: wrongWarehouse.slice(0, 20).map((d) => d.imei) },
+        { imeis: wrongWarehouse.slice(0, 20).map((d) => codeByDeviceId.get(d.id)) },
       );
     }
 
@@ -282,7 +320,11 @@ export class TransfersService {
         ErrorCode.IMEI_NOT_AVAILABLE,
         `${notAvailable.length} phone(s) are not available (already sold, in transfer, or awaiting validation).`,
         400,
-        { imeis: notAvailable.slice(0, 20).map((d) => ({ imei: d.imei, status: d.status })) },
+        {
+          imeis: notAvailable
+            .slice(0, 20)
+            .map((d) => ({ imei: codeByDeviceId.get(d.id), status: d.status })),
+        },
       );
     }
 
@@ -331,7 +373,7 @@ export class TransfersService {
           ErrorCode.IMEI_WRONG_PRODUCT,
           'This phone is not one of the products planned for this transfer.',
           400,
-          { imei: device.imei },
+          { imei: codeByDeviceId.get(device.id) },
         );
       }
       const next = (loadedByProduct.get(device.productId) ?? 0) + 1;
@@ -340,7 +382,7 @@ export class TransfersService {
           ErrorCode.QUANTITY_EXCEEDED,
           `The transfer plans ${planned} unit(s) of this product and they are already loaded.`,
           400,
-          { imei: device.imei, productId: device.productId, planned },
+          { imei: codeByDeviceId.get(device.id), productId: device.productId, planned },
         );
       }
       loadedByProduct.set(device.productId, next);
@@ -348,9 +390,10 @@ export class TransfersService {
 
     const added = await this.prisma.$transaction(async (tx) => {
       const result = await tx.transferDevice.createMany({
-        // A device that resolves here always carries an IMEI — it was matched
-        // by its IMEI above.
-        data: devices.map((d) => ({ transferId, deviceId: d.id, imei: d.imei! })),
+        // The code that resolved this device — its IMEI if it has one, else
+        // the label it was received under — is what gets scanned again at
+        // receive time, so it is what gets stored here.
+        data: devices.map((d) => ({ transferId, deviceId: d.id, imei: codeByDeviceId.get(d.id)! })),
         // A device already on this transfer is a harmless re-scan, not an error.
         skipDuplicates: true,
       });
@@ -373,7 +416,7 @@ export class TransfersService {
       include: { product: { select: { id: true, tracking: true } } },
     });
 
-    const picked: { id: string; imei: string }[] = [];
+    const picked: { id: string; code: string }[] = [];
     const shortfalls: { productId: string; requested: number; available: number }[] = [];
 
     for (const line of plan) {
@@ -399,12 +442,15 @@ export class TransfersService {
         },
         orderBy: { receivedAt: 'asc' },
         take: needed,
-        select: { id: true, imei: true },
+        // A device auto-picked here may have arrived through the label-first
+        // workflow and carry no IMEI at all — its label is the fallback
+        // identifier, the same code that will be scanned again at receive time.
+        select: { id: true, imei: true, label: { select: { code: true } } },
       });
       if (candidates.length < needed) {
         shortfalls.push({ productId: line.productId, requested: needed, available: candidates.length });
       }
-      picked.push(...candidates.map((c) => ({ ...c, imei: c.imei! })));
+      picked.push(...candidates.map((c) => ({ id: c.id, code: (c.imei ?? c.label?.code) as string })));
     }
 
     // Nothing to load — every plan line was accessories, or was already loaded.
@@ -422,7 +468,7 @@ export class TransfersService {
     if (picked.length > 0) {
       const result = await this.prisma.$transaction(async (tx) => {
         const loaded = await tx.transferDevice.createMany({
-          data: picked.map((d) => ({ transferId, deviceId: d.id, imei: d.imei })),
+          data: picked.map((d) => ({ transferId, deviceId: d.id, imei: d.code })),
           skipDuplicates: true,
         });
         await tx.transfer.update({ where: { id: transferId }, data: { status: TransferStatus.READY } });
@@ -653,7 +699,7 @@ export class TransfersService {
       throw new BusinessError(ErrorCode.INVALID_STATUS_TRANSITION, 'This transfer has not been shipped yet.');
     }
 
-    const imeis = normalizeImeiBatch(dto.imeis ?? [], this.config.imei.enforceChecksum);
+    const imeis = normalizeScanCodes(dto.imeis ?? []);
 
     const onTransfer = await this.prisma.transferDevice.findMany({
       where: { transferId },

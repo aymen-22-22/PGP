@@ -890,6 +890,7 @@ const ar: Record<string, string> = {
   'scan.add': 'إضافة',
   'scan.ready': 'جاهز. تُضاف المسحات تلقائيًا — لا تحتاج لمس أي شيء.',
   'scan.duplicate': 'IMEI مضاف مسبقًا',
+  'scan.codeDuplicate': 'تم مسحه مسبقًا',
   'scan.invalid': 'IMEI غير صالح',
   'scan.wrongPhone': 'هاتف خاطئ',
   'scan.soundOff': 'صوت المسح متوقف',

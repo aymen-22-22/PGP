@@ -752,6 +752,7 @@ const en = {
   'scan.add': 'Add',
   'scan.ready': 'Ready. Scans are added automatically — you do not need to tap anything.',
   'scan.duplicate': 'IMEI already scanned',
+  'scan.codeDuplicate': 'Already scanned',
   'scan.invalid': 'Not a valid IMEI',
   'scan.wrongPhone': 'Wrong phone',
   'scan.soundOff': 'Scan sound off',
