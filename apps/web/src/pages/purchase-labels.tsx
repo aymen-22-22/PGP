@@ -64,12 +64,22 @@ function CodeSymbol({ value, size = 96 }: { value: string; size?: number }) {
       height={size}
       shapeRendering="crispEdges"
       aria-label={value}
+      className="shrink-0"
     >
       <rect width={path.width} height={path.height} fill="#fff" />
       <path d={path.d} fill="#000" />
     </svg>
   );
 }
+
+/**
+ * CSS millimetres render at exactly 96px/inch in every browser at 100% zoom —
+ * the same fixed ratio `@page` uses — so sizing off this constant keeps the
+ * on-screen preview a true rehearsal of what the thermal printer produces,
+ * not a guess in unrelated pixels that happened to look right at one size.
+ */
+const MM_TO_PX = 96 / 25.4;
+const mm = (value: number) => value * MM_TO_PX;
 
 /**
  * A sheet of unit labels, laid out to be printed and stuck on boxes.
@@ -132,32 +142,48 @@ export default function PurchaseLabelsPage() {
         <>
           {/* A thermal printer feeds one label at a time — each `.label-page`
               below has to be its own printed page, sized to the roll, not a
-              cell in a grid meant for a sheet of paper. */}
+              cell in a grid meant for a sheet of paper. Everything on it is
+              sized in millimetres so the on-screen preview is the same shape
+              as what comes out of the printer, at every roll size offered. */}
           <style>{`
             @media print {
               @page { size: ${size.width}mm ${size.height}mm; margin: 0; }
+              html, body { margin: 0; }
             }
           `}</style>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 print:block print:gap-0">
-            {sheet.data.map((label) => (
-              <div
-                key={label.id}
-                style={{ ['--label-w' as string]: `${size.width}mm`, ['--label-h' as string]: `${size.height}mm` }}
-                className="label-page flex items-center gap-2 rounded-md border border-border bg-white p-2 text-black print:flex print:h-[var(--label-h)] print:w-[var(--label-w)] print:items-center print:justify-center print:overflow-hidden print:rounded-none print:border-0 print:p-1 print:break-after-page print:last:break-after-auto"
-              >
-                <CodeSymbol value={label.code} size={Math.round(size.height * 2.2)} />
-                <div className="min-w-0 space-y-0.5">
-                  <p className="truncate text-xs font-semibold leading-tight">{label.product.name}</p>
-                  <p className="truncate text-[10px] leading-tight">
-                    {[label.product.storage, label.product.color].filter(Boolean).join(' · ')}
+          <div className="flex flex-wrap justify-center gap-4 print:block print:gap-0">
+            {sheet.data.map((label) => {
+              // A small roll has no room for a subtitle line — better to show
+              // the code clearly than to shrink everything to fit it in.
+              const subtitle =
+                size.height >= 35 ? [label.product.storage, label.product.color].filter(Boolean).join(' · ') : '';
+              return (
+                <div
+                  key={label.id}
+                  style={{ width: mm(size.width), height: mm(size.height) }}
+                  className="label-page flex shrink-0 flex-col items-center justify-center gap-[1mm] overflow-hidden border border-dashed border-border bg-white p-[1.5mm] text-center text-black print:border-0 print:break-after-page print:last:break-after-auto"
+                >
+                  <p
+                    className="w-full truncate font-semibold leading-none"
+                    style={{ fontSize: mm(size.height * 0.09) }}
+                  >
+                    {label.product.name}
                   </p>
-                  <p className="tabular text-[11px] font-bold leading-tight">{label.code}</p>
-                  <p className="text-[10px] leading-tight">
-                    {label.sequence} / {label.of} · {sheet.purchase.number}
+                  {subtitle && (
+                    <p className="w-full truncate leading-none" style={{ fontSize: mm(size.height * 0.07) }}>
+                      {subtitle}
+                    </p>
+                  )}
+                  <CodeSymbol value={label.code} size={Math.round(mm(size.height * 0.4))} />
+                  <p className="tabular font-bold leading-none" style={{ fontSize: mm(size.height * 0.12) }}>
+                    {label.code}
+                  </p>
+                  <p className="leading-none" style={{ fontSize: mm(size.height * 0.07) }}>
+                    {label.sequence}/{label.of} · {sheet.purchase.number}
                   </p>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}
