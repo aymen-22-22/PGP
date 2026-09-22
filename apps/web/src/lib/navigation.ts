@@ -82,6 +82,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { to: '/products', label: 'nav.products', icon: Package },
       { to: '/warehouses', label: 'nav.warehouses', icon: Warehouse },
+      { to: '/delivery', label: 'nav.delivery', icon: Truck },
       { to: '/users', label: 'nav.users', icon: Users },
       { to: '/notifications', label: 'nav.notifications', icon: Mail },
       { to: '/audit-logs', label: 'nav.audit', icon: FileClock },

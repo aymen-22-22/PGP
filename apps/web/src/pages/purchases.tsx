@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Label, Select } from '@/components/ui/input';
 import { EmptyState, ErrorState, FormError, LoadingState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
+import { SelectOrCreate } from '@/components/select-or-create';
 import type { PurchaseListItem } from '@phone-erp/shared-types';
 import { useApiList, useApiMutation, useApiQuery } from '@/hooks/use-api';
 import { useDebounce } from '@/hooks/use-debounce';
@@ -18,6 +19,7 @@ import { api } from '@/lib/api';
 import { hasDraft, saveDraft, takeDraft } from '@/lib/form-draft';
 import { isAdmin, useAuth } from '@/lib/auth';
 import { formatDate, formatNumber } from '@/lib/utils';
+import { NewPartyForm } from './partners';
 
 const STATUSES = ['DRAFT', 'ORDERED', 'PARTIALLY_RECEIVED', 'RECEIVED', 'CANCELLED'];
 
@@ -202,17 +204,17 @@ function NewPurchaseForm({ onDone }: { onDone: () => void }) {
             );
           }}
         >
-          <div className="space-y-1.5">
-            <Label htmlFor="supplier">{t('common.supplier')}</Label>
-            <Select id="supplier" value={supplierId} onChange={(e) => setSupplierId(e.target.value)} required>
-              <option value="">{t('common.choose')}</option>
-              {suppliers.data?.data.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </Select>
-          </div>
+          <SelectOrCreate
+            id="supplier"
+            label={t('common.supplier')}
+            value={supplierId}
+            onChange={setSupplierId}
+            options={suppliers.data?.data ?? []}
+            createLabel={t('partners.newSupplier')}
+            required
+          >
+            {(done) => <NewPartyForm kind="suppliers" onDone={(created) => created && done(created)} />}
+          </SelectOrCreate>
 
           <div className="space-y-1.5">
             <Label htmlFor="warehouse">{t('purchases.receivingWarehouse')}</Label>

@@ -10,6 +10,7 @@ import { CommonModule } from './common/common.module';
 import { CostingModule } from './costing/costing.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { CsrfGuard } from './common/guards/csrf.guard';
+import { DeliveryModule } from './delivery/delivery.module';
 import { UserThrottlerGuard } from './common/guards/user-throttler.guard';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -92,6 +93,7 @@ function noStore(_request: Request, response: Response, next: NextFunction): voi
     PricingModule,
     PosModule,
     TransfersModule,
+    DeliveryModule,
     SalesModule,
     ReturnsModule,
     InventoryModule,

@@ -9,10 +9,12 @@ import { useToast } from '@/components/ui/toast';
 import { CodeList } from '@/features/scanner/code-list';
 import { CodeScanInput } from '@/features/scanner/code-scan-input';
 import { useCodeBuffer } from '@/features/scanner/use-code-buffer';
+import { SelectOrCreate } from '@/components/select-or-create';
 import { useApiMutation, useApiQuery } from '@/hooks/use-api';
 import { useI18n } from '@/i18n/provider';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { NewCompanyForm, NewDriverForm } from './delivery';
 
 interface WarehouseOption {
   id: string;
@@ -22,6 +24,16 @@ interface WarehouseOption {
 interface ProductOption {
   id: string;
   name: string;
+}
+interface CompanyOption {
+  id: string;
+  name: string;
+  isActive: boolean;
+}
+interface DriverOption {
+  id: string;
+  name: string;
+  company: { id: string; name: string } | null;
 }
 
 /**
@@ -38,11 +50,20 @@ export default function SendPage() {
 
   const warehouses = useApiQuery<WarehouseOption[]>('/warehouses');
   const products = useApiQuery<{ data: ProductOption[] }>('/products?pageSize=200');
+  const companies = useApiQuery<{ data: CompanyOption[] }>('/delivery/companies?pageSize=100');
+  const drivers = useApiQuery<{ data: DriverOption[] }>('/delivery/drivers?pageSize=100');
 
   const [destinationId, setDestinationId] = useState('');
   const [productId, setProductId] = useState('');
   const [quantity, setQuantity] = useState('');
+  const [deliveryCompanyId, setDeliveryCompanyId] = useState('');
+  const [driverId, setDriverId] = useState('');
   const [scanning, setScanning] = useState(false);
+
+  const driversForCompany = useMemo(
+    () => (drivers.data?.data ?? []).filter((d) => !deliveryCompanyId || d.company?.id === deliveryCompanyId),
+    [drivers.data, deliveryCompanyId],
+  );
 
   const planned = Number(quantity);
   const buffer = useCodeBuffer({ expected: planned > 0 ? planned : undefined });
@@ -55,6 +76,8 @@ export default function SendPage() {
       destinationWarehouseId: destinationId,
       items: [{ productId, quantity: planned }],
       imeis: buffer.codes,
+      deliveryCompanyId: deliveryCompanyId || undefined,
+      driverId: driverId || undefined,
     });
     await api.post(`/transfers/${transfer.id}/ship`, {});
     return transfer;
@@ -72,6 +95,13 @@ export default function SendPage() {
 
   const ready = destinationId && productId && planned > 0;
 
+  const carrierLabel = [
+    companies.data?.data.find((c) => c.id === deliveryCompanyId)?.name,
+    drivers.data?.data.find((d) => d.id === driverId)?.name,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
   if (scanning) {
     return (
       <div className="space-y-4">
@@ -82,6 +112,7 @@ export default function SendPage() {
           </Button>
           <span className="text-sm text-muted-foreground">
             {destinations.find((w) => w.id === destinationId)?.name}
+            {carrierLabel && ` · ${carrierLabel}`}
           </span>
         </div>
 
@@ -162,6 +193,38 @@ export default function SendPage() {
             required
           />
         </div>
+
+        <SelectOrCreate
+          id="send-carrier-company"
+          label={t('delivery.carrierCompany')}
+          value={deliveryCompanyId}
+          onChange={(id) => {
+            setDeliveryCompanyId(id);
+            // A driver picked for a different firm no longer applies.
+            setDriverId((current) =>
+              drivers.data?.data.find((d) => d.id === current)?.company?.id === id ? current : '',
+            );
+          }}
+          options={companies.data?.data ?? []}
+          placeholder={t('common.optional')}
+          createLabel={t('delivery.newCompanyInline')}
+        >
+          {(done) => <NewCompanyForm onDone={(created) => created && done(created)} />}
+        </SelectOrCreate>
+
+        <SelectOrCreate
+          id="send-carrier-driver"
+          label={t('delivery.carrierDriver')}
+          value={driverId}
+          onChange={setDriverId}
+          options={driversForCompany}
+          placeholder={t('common.optional')}
+          createLabel={t('delivery.newDriverInline')}
+        >
+          {(done) => (
+            <NewDriverForm companies={companies.data?.data ?? []} onDone={(created) => created && done(created)} />
+          )}
+        </SelectOrCreate>
 
         <Button className="w-full" size="lg" disabled={!ready} onClick={() => setScanning(true)}>
           {t('send.startScanning')}

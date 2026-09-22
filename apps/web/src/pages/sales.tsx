@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Label, Select } from '@/components/ui/input';
 import { EmptyState, ErrorState, FormError, LoadingState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
+import { SelectOrCreate } from '@/components/select-or-create';
 import type { SaleListItem } from '@phone-erp/shared-types';
 import { useApiList, useApiMutation, useApiQuery } from '@/hooks/use-api';
 import { useDebounce } from '@/hooks/use-debounce';
@@ -17,6 +18,7 @@ import { useStatusLabel } from '@/lib/status';
 import { api } from '@/lib/api';
 import { isAdmin, useAuth } from '@/lib/auth';
 import { formatDate } from '@/lib/utils';
+import { NewPartyForm } from './partners';
 
 
 const STATUSES = ['DRAFT', 'CONFIRMED', 'COMPLETED', 'CANCELLED'];
@@ -170,17 +172,17 @@ function NewSaleForm({ onDone }: { onDone: () => void }) {
             );
           }}
         >
-          <div className="space-y-1.5">
-            <Label htmlFor="customer">{t('common.customer')}</Label>
-            <Select id="customer" value={customerId} onChange={(e) => setCustomerId(e.target.value)} required>
-              <option value="">{t('common.choose')}</option>
-              {customers.data?.data.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
-          </div>
+          <SelectOrCreate
+            id="customer"
+            label={t('common.customer')}
+            value={customerId}
+            onChange={setCustomerId}
+            options={customers.data?.data ?? []}
+            createLabel={t('partners.newCustomer')}
+            required
+          >
+            {(done) => <NewPartyForm kind="customers" onDone={(created) => created && done(created)} />}
+          </SelectOrCreate>
 
           {isAdmin(user) && (
             <div className="space-y-1.5">

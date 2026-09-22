@@ -34,6 +34,7 @@ const SaleDetailPage = lazy(() => import('@/pages/sale-detail'));
 const ProductsPage = lazy(() => import('@/pages/products'));
 const PartnersPage = lazy(() => import('@/pages/partners'));
 const WarehousesPage = lazy(() => import('@/pages/warehouses'));
+const DeliveryPage = lazy(() => import('@/pages/delivery'));
 const UsersPage = lazy(() => import('@/pages/users'));
 const AuditLogsPage = lazy(() => import('@/pages/audit-logs'));
 const NotificationsPage = lazy(() => import('@/pages/notifications'));
@@ -150,6 +151,14 @@ export function AppRouter() {
             element={
               <RequireAdmin>
                 <WarehousesPage />
+              </RequireAdmin>
+            }
+          />
+          <Route
+            path="delivery"
+            element={
+              <RequireAdmin>
+                <DeliveryPage />
               </RequireAdmin>
             }
           />
