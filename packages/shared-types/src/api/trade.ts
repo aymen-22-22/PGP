@@ -37,8 +37,8 @@ export interface TransferListItem<TDate = string> {
   number: string;
   status: TransferStatus;
   createdAt: TDate;
-  sourceWarehouse: NamedRef;
-  destinationWarehouse: NamedRef;
+  sourceWarehouse: NamedRef & { code: string };
+  destinationWarehouse: NamedRef & { code: string };
   shipment: { number: string; status: ShipmentStatus; shippedAt: TDate | null } | null;
   shipmentNumber: string | null;
   shipmentStatus: ShipmentStatus | null;

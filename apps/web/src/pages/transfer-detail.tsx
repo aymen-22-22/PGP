@@ -1,7 +1,8 @@
-import { ArrowLeft, ArrowRight, PackageCheck, Send, Wand2 } from 'lucide-react';
+import { ArrowLeft, ClipboardList, PackageCheck, PackageOpen, Send, Truck, Wand2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { CancelAction } from '@/components/cancel-action';
+import { RouteLine, Steps, type Step } from '@/components/journey';
 import { StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -73,15 +74,28 @@ export default function TransferDetailPage() {
         <CardContent className="space-y-4 p-4 sm:p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h1 className="tabular text-xl font-bold">{transfer.number}</h1>
-              <p className="flex flex-wrap items-center gap-1.5 text-base font-medium">
-                {transfer.sourceWarehouse.name}
-                <ArrowRight className="h-4 w-4 text-muted-foreground" aria-hidden />
-                {transfer.destinationWarehouse.name}
-              </p>
+              <p className="tabular text-xs font-medium text-muted-foreground">{transfer.number}</p>
+              <h1 className="text-xl font-bold">
+                {t(`journey.transfer.${transfer.status}`, {
+                  from: transfer.sourceWarehouse.name,
+                  to: transfer.destinationWarehouse.name,
+                })}
+              </h1>
             </div>
             <StatusBadge status={transfer.status} />
           </div>
+
+          <RouteLine
+            from={transfer.sourceWarehouse}
+            to={transfer.destinationWarehouse}
+            progress={{ DRAFT: 0, READY: 0.08, IN_TRANSIT: 0.55, RECEIVED: 1 }[transfer.status] ?? 0}
+            cancelled={transfer.status === 'CANCELLED'}
+          />
+
+          <Steps
+            className="border-t pt-4"
+            steps={transferSteps(transfer, t, dateTime)}
+          />
 
           {canCancel && (
             <CancelAction
@@ -412,4 +426,51 @@ function Figure({ label, value, tone }: { label: string; value: number; tone?: '
       <p className={`tabular text-stat ${tone === 'success' ? 'text-success' : ''}`}>{value}</p>
     </div>
   );
+}
+
+function transferSteps(
+  transfer: TransferDetail,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+  dateTime: (value: string) => string,
+): Step[] {
+  const order = ['DRAFT', 'READY', 'IN_TRANSIT', 'RECEIVED'];
+  const at = order.indexOf(transfer.status);
+  const cancelled = transfer.status === 'CANCELLED';
+  const state = (reached: number): Step['state'] =>
+    cancelled ? (reached === 0 ? 'done' : reached === 1 ? 'failed' : 'todo') : at > reached ? 'done' : at === reached ? 'current' : 'todo';
+  const shipment = transfer.shipment;
+  return [
+    {
+      label: t('journey.step.prepared'),
+      icon: ClipboardList,
+      state: cancelled || at > 0 || transfer.loadedQuantity > 0 ? 'done' : 'current',
+      detail: [dateTime(transfer.createdAt), transfer.createdBy?.name].filter(Boolean).join(' · '),
+    },
+    {
+      label: t('journey.step.loaded'),
+      icon: PackageOpen,
+      state: cancelled ? 'failed' : at >= 2 ? 'done' : transfer.loadedQuantity > 0 ? 'current' : 'todo',
+      detail: t('journey.units', { done: transfer.loadedQuantity, total: transfer.plannedQuantity }),
+    },
+    {
+      label: t('journey.step.onTheWay'),
+      icon: Truck,
+      state: state(2),
+      detail: shipment?.shippedAt
+        ? [dateTime(shipment.shippedAt), shipment.driver?.name ?? shipment.deliveryCompany?.name ?? shipment.carrier]
+            .filter(Boolean)
+            .join(' · ')
+        : undefined,
+    },
+    {
+      label: t('journey.step.arrived'),
+      icon: PackageCheck,
+      state: transfer.status === 'RECEIVED' ? 'done' : state(3),
+      detail: shipment?.receivedAt
+        ? [dateTime(shipment.receivedAt), shipment.receivedBy?.name].filter(Boolean).join(' · ')
+        : transfer.receivedQuantity > 0
+          ? t('journey.units', { done: transfer.receivedQuantity, total: transfer.loadedQuantity })
+          : undefined,
+    },
+  ];
 }

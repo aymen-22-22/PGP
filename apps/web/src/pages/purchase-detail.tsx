@@ -1,6 +1,7 @@
-import { ArrowLeft, ScanLine, Tags } from 'lucide-react';
+import { ArrowLeft, PackageCheck, ScanLine, ShoppingCart, Tags, Truck } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { CancelAction } from '@/components/cancel-action';
+import { RouteLine, Steps } from '@/components/journey';
 import { StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,7 +23,7 @@ interface PurchaseDetail {
   purchaseDate: string;
   notes: string | null;
   supplier: { name: string; country: string | null };
-  warehouse: { id: string; name: string };
+  warehouse: { id: string; name: string; code?: string };
   createdBy: { name: string } | null;
   items: {
     id: string;
@@ -59,6 +60,8 @@ export default function PurchaseDetailPage() {
   if (query.isError) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
 
   const purchase = query.data!;
+  const ordered = purchase.items.reduce((sum, item) => sum + item.quantity, 0);
+  const received = purchase.items.reduce((sum, item) => sum + item.receivedQuantity, 0);
   const showPricing = purchase.totalAmount !== undefined;
 
   return (
@@ -74,14 +77,53 @@ export default function PurchaseDetailPage() {
         <CardContent className="space-y-4 p-4 sm:p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h1 className="tabular text-xl font-bold">{purchase.number}</h1>
-              <p className="text-base font-medium">{purchase.supplier.name}</p>
-              <p className="text-sm text-muted-foreground">
-                → {purchase.warehouse.name} · {formatDate(purchase.purchaseDate)}
+              <p className="tabular text-xs font-medium text-muted-foreground">
+                {purchase.number} · {formatDate(purchase.purchaseDate)}
               </p>
+              <h1 className="text-xl font-bold">
+                {t(`journey.purchase.${purchase.status}`, { from: purchase.supplier.name, to: purchase.warehouse.name })}
+              </h1>
             </div>
             <StatusBadge status={purchase.status} />
           </div>
+
+          <RouteLine
+            from={{ name: purchase.supplier.name }}
+            to={{ name: purchase.warehouse.name, code: purchase.warehouse.code }}
+            progress={ordered ? received / ordered : 0}
+            cancelled={purchase.status === 'CANCELLED'}
+          />
+
+          <Steps
+            className="border-t pt-4"
+            steps={[
+              {
+                label: t('journey.step.ordered'),
+                icon: ShoppingCart,
+                state: purchase.status === 'DRAFT' ? 'current' : 'done',
+                detail: [formatDate(purchase.purchaseDate), purchase.createdBy?.name].filter(Boolean).join(' · '),
+              },
+              {
+                label: t('journey.step.arriving'),
+                icon: Truck,
+                state:
+                  purchase.status === 'CANCELLED'
+                    ? 'failed'
+                    : received >= ordered && ordered > 0
+                      ? 'done'
+                      : purchase.status === 'DRAFT'
+                        ? 'todo'
+                        : 'current',
+                detail: t('journey.units', { done: received, total: ordered }),
+              },
+              {
+                label: t('journey.step.inStock'),
+                icon: PackageCheck,
+                state: purchase.status === 'RECEIVED' ? 'done' : 'todo',
+                detail: purchase.warehouse.name,
+              },
+            ]}
+          />
 
           {purchase.status !== 'CANCELLED' && (
             <div className="flex flex-wrap gap-2">
