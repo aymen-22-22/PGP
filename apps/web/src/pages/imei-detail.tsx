@@ -134,7 +134,7 @@ export default function ImeiDetailPage() {
               return (
                 <li key={movement.id} className="relative pb-6 last:pb-0">
                   <span
-                    className={`absolute -start-[2.3rem] flex h-8 w-8 items-center justify-center rounded-full text-white shadow-sm ${MOVEMENT_COLOUR[movement.type] ?? 'bg-slate-500'}`}
+                    className={`absolute -start-[calc(2.5rem+1px)] flex h-8 w-8 items-center justify-center rounded-full text-white shadow-sm ${MOVEMENT_COLOUR[movement.type] ?? 'bg-slate-500'}`}
                   >
                     <Icon className="h-4 w-4" aria-hidden />
                   </span>
