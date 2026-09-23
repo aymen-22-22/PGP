@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { DeviceStatus, Prisma } from '@prisma/client';
 import {
   AuditAction,
   ErrorCode,
@@ -83,7 +83,29 @@ export class ProductsService {
       }),
       this.prisma.product.count({ where }),
     ]);
-    return paginate(data.map(toProduct), total, query);
+
+    const ids = data.map((p) => p.id);
+    const [devices, levels] = await Promise.all([
+      this.prisma.device.groupBy({
+        by: ['productId'],
+        where: { productId: { in: ids }, status: DeviceStatus.IN_STOCK },
+        _count: { _all: true },
+      }),
+      this.prisma.stockLevel.groupBy({
+        by: ['productId'],
+        where: { productId: { in: ids } },
+        _sum: { quantity: true },
+      }),
+    ]);
+    const onHand = new Map<string, number>();
+    for (const d of devices) onHand.set(d.productId, d._count._all);
+    for (const l of levels) onHand.set(l.productId, (onHand.get(l.productId) ?? 0) + (l._sum.quantity ?? 0));
+
+    return paginate(
+      data.map((row) => ({ ...toProduct(row), inStock: onHand.get(row.id) ?? 0 })),
+      total,
+      query,
+    );
   }
 
   async findOne(id: string): Promise<ProductDto> {

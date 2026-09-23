@@ -34,6 +34,8 @@ export interface Product {
   defaultSalePrice: string;
   currency: Currency;
   isActive: boolean;
+  /** Units on hand across every warehouse. Only the catalogue list fills it in. */
+  inStock?: number;
 }
 
 /** On-hand quantity of one accessory in one warehouse. */

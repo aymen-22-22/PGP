@@ -68,7 +68,6 @@ export default function UsersPage() {
             <thead>
               <tr>
                 <Th>{t('users.name')}</Th>
-                <Th>{t('users.email')}</Th>
                 <Th>{t('users.role')}</Th>
                 <Th>{t('common.warehouse')}</Th>
                 <Th>{t('users.lastLogin')}</Th>
@@ -77,16 +76,24 @@ export default function UsersPage() {
             </thead>
             <tbody>
               {query.data.data.map((user) => (
-                <Tr key={user.id}>
-                  <Td className="font-medium">
-                    {user.name}
-                    {!user.isActive && (
-                      <Badge variant="secondary" className="ms-2">
-                        {t('users.inactive')}
-                      </Badge>
-                    )}
+                <Tr key={user.id} className={user.isActive ? undefined : 'bg-muted/40 text-muted-foreground'}>
+                  <Td>
+                    <div className="flex items-center gap-3">
+                      <span
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground"
+                        aria-hidden
+                      >
+                        {initials(user.name)}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="flex items-center gap-2 font-medium text-foreground">
+                          {user.name}
+                          {!user.isActive && <Badge variant="destructive">{t('users.inactive')}</Badge>}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{user.email}</p>
+                      </div>
+                    </div>
                   </Td>
-                  <Td className="text-muted-foreground">{user.email}</Td>
                   <Td>
                     <Badge variant={user.role === 'ADMIN' ? 'default' : 'secondary'}>
                       {user.role === 'ADMIN' ? t('users.roleAdmin') : t('users.roleWarehouse')}
@@ -96,13 +103,15 @@ export default function UsersPage() {
                   <Td className="text-muted-foreground">
                     {user.lastLoginAt ? dateTime(user.lastLoginAt) : '—'}
                   </Td>
-                  <Td>
+                  <Td className="text-end">
                     {user.id !== me?.id && (
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
+                        className={user.isActive ? 'text-muted-foreground hover:border-destructive/50 hover:text-destructive' : undefined}
                         disabled={update.isPending}
                         onClick={() =>
+                          (!user.isActive || window.confirm(`${t('users.deactivate')} — ${user.name}?`)) &&
                           update.mutate(
                             { id: user.id, body: { isActive: !user.isActive } },
                             {
@@ -127,6 +136,14 @@ export default function UsersPage() {
     </div>
   );
 }
+
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]!.toUpperCase())
+    .join('');
 
 function NewUserForm({ onDone }: { onDone: () => void }) {
   const { t } = useI18n();
