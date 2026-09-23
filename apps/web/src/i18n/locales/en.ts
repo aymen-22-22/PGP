@@ -38,7 +38,7 @@ const en = {
   'journey.purchase.RECEIVED': 'All arrived in {to}',
   'journey.purchase.CANCELLED': 'Order cancelled',
   'journey.history': 'Journey of this phone',
-  'journey.move.PURCHASE_RECEIPT': 'Arrived from the supplier',
+  'journey.move.PURCHASE_RECEIPT': 'Arrived from the supplier in {to}',
   'journey.move.TRANSFER_OUT': 'Left for {to}',
   'journey.move.TRANSFER_IN': 'Arrived in {to}',
   'journey.move.SALE': 'Sold',

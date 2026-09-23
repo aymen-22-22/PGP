@@ -23,10 +23,20 @@ import { STOCK_STATUS } from './stock-products';
 const MOVEMENT_ICON: Record<string, typeof Truck> = {
   PURCHASE_RECEIPT: PackageCheck,
   TRANSFER_OUT: Truck,
-  TRANSFER_IN: Truck,
+  TRANSFER_IN: PackageCheck,
   SALE: ShoppingCart,
   RETURN: Undo2,
   ADJUSTMENT: Building2,
+};
+
+/** Arriving (from a supplier or another warehouse) blue, leaving orange, selling green. */
+const MOVEMENT_COLOUR: Record<string, string> = {
+  PURCHASE_RECEIPT: 'bg-blue-600',
+  TRANSFER_OUT: 'bg-orange-500',
+  TRANSFER_IN: 'bg-blue-600',
+  SALE: 'bg-emerald-600',
+  RETURN: 'bg-amber-500',
+  ADJUSTMENT: 'bg-slate-500',
 };
 
 /** Where a movement's reference document lives, when it has one. */
@@ -326,7 +336,9 @@ export default function StockProduct360Page() {
                     : undefined;
                 return (
                   <li key={movement.id} className="relative pb-5 last:pb-0">
-                    <span className="absolute -start-[2.15rem] flex h-7 w-7 items-center justify-center rounded-full border-2 border-border bg-card">
+                    <span
+                      className={`absolute -start-[2.15rem] flex h-7 w-7 items-center justify-center rounded-full text-white shadow-sm ${MOVEMENT_COLOUR[movement.type] ?? 'bg-slate-500'}`}
+                    >
                       <Icon className="h-3.5 w-3.5" aria-hidden />
                     </span>
                     <div className="flex flex-wrap items-baseline gap-x-2">

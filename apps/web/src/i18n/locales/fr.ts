@@ -34,7 +34,7 @@ const fr: Record<string, string> = {
   'journey.purchase.RECEIVED': 'Tout est arrivé à {to}',
   'journey.purchase.CANCELLED': 'Commande annulée',
   'journey.history': 'Parcours de ce téléphone',
-  'journey.move.PURCHASE_RECEIPT': 'Arrivé du fournisseur',
+  'journey.move.PURCHASE_RECEIPT': 'Arrivé du fournisseur à {to}',
   'journey.move.TRANSFER_OUT': 'Parti vers {to}',
   'journey.move.TRANSFER_IN': 'Arrivé à {to}',
   'journey.move.SALE': 'Vendu',
