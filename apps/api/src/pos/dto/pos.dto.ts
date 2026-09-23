@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Currency } from '@prisma/client';
+import { Currency, PaymentMethod } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -10,6 +10,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -40,6 +41,18 @@ export class PosItemDto {
   @IsOptional()
   @IsNumberString()
   unitPrice?: string;
+}
+
+/** What the customer handed over at the counter. */
+export class PosPaymentDto {
+  @ApiProperty({ example: '500.00', description: '0 for a sale on credit; less than the total for a deposit' })
+  @Matches(/^\d{1,12}(\.\d{1,2})?$/, { message: 'amount must be an amount with at most 2 decimals' })
+  amount!: string;
+
+  @ApiPropertyOptional({ enum: PaymentMethod, default: PaymentMethod.CASH })
+  @IsOptional()
+  @IsEnum(PaymentMethod)
+  method?: PaymentMethod;
 }
 
 export class PosSaleDto {
@@ -75,6 +88,12 @@ export class PosSaleDto {
   warehouseId?: string;
 
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(300) notes?: string;
+
+  @ApiPropertyOptional({ type: () => PosPaymentDto, description: 'Defaults to the full total, in cash' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PosPaymentDto)
+  payment?: PosPaymentDto;
 }
 
 export class PosLookupDto {

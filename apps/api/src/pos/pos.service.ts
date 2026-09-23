@@ -8,7 +8,7 @@ import {
   TrackingMode,
   TransferStatus,
 } from '@prisma/client';
-import { AuditAction, ErrorCode, add, multiply, subtract } from '@phone-erp/shared-types';
+import { AuditAction, ErrorCode, add, multiply, subtract, toMinor } from '@phone-erp/shared-types';
 import { AuditService } from '../audit/audit.service';
 import { BusinessError } from '../common/errors/business.error';
 import { scanCode } from '../common/pipes/imei.util';
@@ -345,6 +345,13 @@ export class PosService {
       ).map((p) => [p.id, p.name]),
     );
 
+    // The till takes the money now: the full total in cash unless the seller
+    // says otherwise (a deposit, card, or 0 for a sale on credit).
+    const paid = dto.payment?.amount ?? totalAmount;
+    if (toMinor(paid) < 0n || toMinor(paid) > toMinor(totalAmount)) {
+      throw new BusinessError(ErrorCode.VALIDATION_FAILED, `The amount paid must be between 0 and ${totalAmount}.`);
+    }
+
     const now = new Date();
     const result = await this.prisma.$transaction(
       async (tx) => {
@@ -366,6 +373,14 @@ export class PosService {
             notes: dto.notes,
             completedAt: now,
             createdById: user.id,
+            amountPaid: paid,
+            ...(toMinor(paid) > 0n
+              ? {
+                  payments: {
+                    create: { amount: paid, method: dto.payment?.method ?? 'CASH', paidAt: now, createdById: user.id },
+                  },
+                }
+              : {}),
             items: {
               create: [
                 ...[...byProduct.entries()].map(([productId, b]) => ({

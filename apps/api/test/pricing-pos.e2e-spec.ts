@@ -196,6 +196,23 @@ describe('Selling prices and the counter', () => {
       expect(res.body.currency).toBe('DZD');
     });
 
+    it('counts a till sale as paid in cash unless told otherwise', async () => {
+      const full = await as(app, admin)
+        .post('/api/v1/pos/sales')
+        .send({ warehouseId: fixture.central.id, lines: [{ imei: imeis[0] }] })
+        .expect(201);
+      const paid = await as(app, admin).get(`/api/v1/sales/${full.body.saleId}`).expect(200);
+      expect(paid.body).toMatchObject({ paymentStatus: 'PAID', balance: '0.00' });
+      expect(paid.body.payments[0].method).toBe('CASH');
+
+      const credit = await as(app, admin)
+        .post('/api/v1/pos/sales')
+        .send({ warehouseId: fixture.central.id, lines: [{ imei: imeis[1] }], payment: { amount: '0' } })
+        .expect(201);
+      const owed = await as(app, admin).get(`/api/v1/sales/${credit.body.saleId}`).expect(200);
+      expect(owed.body.paymentStatus).toBe('UNPAID');
+    });
+
     it('refuses a handset that is not in this shop', async () => {
       const res = await as(app, admin)
         .post('/api/v1/pos/lookup')

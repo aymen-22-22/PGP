@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { Pagination } from '@/components/pagination';
 import { PageHeader, SearchField } from '@/components/page';
 import { StatusBadge } from '@/components/ui/badge';
+import { PAYMENT_METHODS, PaymentBadge } from '@/features/sales/payments';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Label, Select } from '@/components/ui/input';
@@ -28,6 +29,7 @@ export default function SalesPage() {
   const statusLabel = useStatusLabel();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
+  const [payment, setPayment] = useState('');
   const [page, setPage] = useState(1);
   const [creating, setCreating] = useState(false);
   const debounced = useDebounce(search);
@@ -35,6 +37,7 @@ export default function SalesPage() {
   const query = useApiList<SaleListItem>('/sales', {
     search: debounced || undefined,
     status: status || undefined,
+    payment: payment || undefined,
     page,
     pageSize: 25,
   });
@@ -54,7 +57,7 @@ export default function SalesPage() {
 
       {creating && <NewSaleForm onDone={() => setCreating(false)} />}
 
-      <div className="grid gap-3 sm:grid-cols-[1fr_14rem]">
+      <div className="grid gap-3 sm:grid-cols-[1fr_12rem_12rem]">
         <SearchField
           value={search}
           onChange={(v) => {
@@ -75,6 +78,21 @@ export default function SalesPage() {
           {STATUSES.map((s) => (
             <option key={s} value={s}>
               {statusLabel(s)}
+            </option>
+          ))}
+        </Select>
+        <Select
+          value={payment}
+          onChange={(e) => {
+            setPayment(e.target.value);
+            setPage(1);
+          }}
+          aria-label={t('payment.title')}
+        >
+          <option value="">{t('payment.any')}</option>
+          {(['UNPAID', 'PARTIAL', 'PAID'] as const).map((p) => (
+            <option key={p} value={p}>
+              {t(`payment.status.${p}`)}
             </option>
           ))}
         </Select>
@@ -105,7 +123,15 @@ export default function SalesPage() {
                       {formatDate(sale.createdAt)}
                     </p>
                   </div>
-                  <StatusBadge status={sale.status} />
+                  <div className="flex flex-col items-end gap-1">
+                    <StatusBadge status={sale.status} />
+                    {sale.status !== 'CANCELLED' && <PaymentBadge status={sale.paymentStatus} />}
+                    {sale.paymentStatus !== 'PAID' && sale.status !== 'CANCELLED' && (
+                      <span className="tabular text-xs font-semibold text-destructive">
+                        {t('payment.owes', { amount: money(sale.balance, sale.currency) })}
+                      </span>
+                    )}
+                  </div>
                 </Link>
               </li>
             ))}
@@ -132,6 +158,8 @@ function NewSaleForm({ onDone }: { onDone: () => void }) {
   const [productId, setProductId] = useState('');
   const [quantity, setQuantity] = useState('');
   const [unitPrice, setUnitPrice] = useState('');
+  const [paidNow, setPaidNow] = useState('');
+  const [payMethod, setPayMethod] = useState('CASH');
 
   const create = useApiMutation(
     (body: unknown) => api.post<{ id: string; number: string }>('/sales', body),
@@ -161,6 +189,7 @@ function NewSaleForm({ onDone }: { onDone: () => void }) {
                     ...(unitPrice ? { unitPrice: Number(unitPrice).toFixed(2) } : {}),
                   },
                 ],
+                ...(Number(paidNow) > 0 ? { payment: { amount: Number(paidNow).toFixed(2), method: payMethod } } : {}),
               },
               {
                 onSuccess: (result) => {
@@ -256,6 +285,51 @@ function NewSaleForm({ onDone }: { onDone: () => void }) {
               {t('purchases.total', { amount: money((Number(quantity) * Number(unitPrice)).toFixed(2)) })}
             </p>
           )}
+
+          <div className="space-y-1.5">
+            <Label htmlFor="sale-paid">{t('payment.paidNow')}</Label>
+            <Input
+              id="sale-paid"
+              type="number"
+              min={0}
+              step="0.01"
+              inputMode="decimal"
+              value={paidNow}
+              onChange={(e) => setPaidNow(e.target.value)}
+              placeholder="0.00"
+            />
+            {quantity && unitPrice && (
+              <div className="flex gap-3 text-xs">
+                <button
+                  type="button"
+                  className="font-medium text-primary hover:underline"
+                  onClick={() => setPaidNow((Number(quantity) * Number(unitPrice)).toFixed(2))}
+                >
+                  {t('payment.all')}
+                </button>
+                <button
+                  type="button"
+                  className="font-medium text-primary hover:underline"
+                  onClick={() => setPaidNow(((Number(quantity) * Number(unitPrice)) / 2).toFixed(2))}
+                >
+                  {t('payment.half')}
+                </button>
+                <button type="button" className="font-medium text-primary hover:underline" onClick={() => setPaidNow('')}>
+                  {t('payment.status.UNPAID')}
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="sale-pay-method">{t('payment.methodLabel')}</Label>
+            <Select id="sale-pay-method" value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
+              {PAYMENT_METHODS.map((m) => (
+                <option key={m} value={m}>
+                  {t(`payment.method.${m}`)}
+                </option>
+              ))}
+            </Select>
+          </div>
 
           <div className="sm:col-span-2">
             <FormError error={create.error} />
