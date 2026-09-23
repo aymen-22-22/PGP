@@ -1,4 +1,4 @@
-import { Building2, FileClock, KeyRound, LogOut, Printer, User, Warehouse } from 'lucide-react';
+import { Building2, ChevronRight, FileClock, KeyRound, LogOut, Printer, User, Warehouse } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -47,16 +47,20 @@ export default function MorePage() {
           <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t(section.title)}
           </h2>
-          <div className="grid gap-2">
+          <ul className="divide-y overflow-hidden rounded-lg border bg-card">
             {section.items.map(({ to, label, icon: Icon }) => (
-              <Button key={to} asChild variant="outline" size="lg" className="justify-start gap-3">
-                <Link to={to}>
+              <li key={to}>
+                <Link
+                  to={to}
+                  className="flex touch-target items-center gap-3 px-4 text-[0.95rem] font-medium transition-colors active:bg-accent hover:bg-accent/50"
+                >
                   <Icon className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden />
-                  {t(label)}
+                  <span className="flex-1">{t(label)}</span>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground rtl:rotate-180" aria-hidden />
                 </Link>
-              </Button>
+              </li>
             ))}
-          </div>
+          </ul>
         </section>
       ))}
 
@@ -364,7 +368,7 @@ function LanguageChoice() {
       <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {t('more.language')}
       </h2>
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-3 gap-1 rounded-lg border bg-muted p-1">
         {(Object.keys(LOCALES) as Locale[]).map((code) => (
           <button
             key={code}
@@ -373,10 +377,10 @@ function LanguageChoice() {
             dir={LOCALES[code].dir}
             aria-pressed={locale === code}
             onClick={() => setLocale(code)}
-            className={`touch-target rounded-lg border-2 px-3 py-2.5 text-base font-semibold transition-colors ${
+            className={`h-10 rounded-md px-2 text-sm font-semibold transition-colors ${
               locale === code
-                ? 'border-primary bg-primary/5 text-foreground'
-                : 'border-border text-muted-foreground hover:border-muted-foreground/40'
+                ? 'bg-card text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             {LOCALES[code].label}

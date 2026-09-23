@@ -89,6 +89,63 @@
   }
 }
 
+/* Phone layout for tables: see TableWrap. */
+@media (max-width: 639px) {
+  .stack-table thead {
+    display: none;
+  }
+  .stack-table tr {
+    display: block;
+    border-bottom: 1px solid hsl(var(--border));
+    padding: 0.5rem 0;
+  }
+  .stack-table tbody tr:last-child,
+  .stack-table tfoot tr:last-child {
+    border-bottom: 0;
+  }
+  .stack-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    border: 0 !important;
+    padding: 0.2rem 0.875rem !important;
+    white-space: normal;
+    text-align: end;
+  }
+  .stack-table td::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: hsl(var(--muted-foreground));
+    text-align: start;
+  }
+  /* The first cell names the row: full width, no label. */
+  .stack-table td:first-child {
+    justify-content: flex-start;
+    text-align: start;
+    font-weight: 600;
+    padding-bottom: 0.35rem !important;
+  }
+  .stack-table td:first-child .text-xs {
+    font-weight: 400;
+  }
+  .stack-table td:first-child::before,
+  .stack-table td[data-label='']::before {
+    content: none;
+  }
+  /* Action cells (no header) sit on the right. */
+  .stack-table td[data-label=''] {
+    justify-content: flex-end;
+  }
+  .stack-table td:empty {
+    display: none;
+  }
+}
+
 @layer utilities {
   .pb-safe {
     padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem);

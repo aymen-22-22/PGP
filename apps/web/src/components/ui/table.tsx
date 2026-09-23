@@ -1,11 +1,48 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
-/** Tables scroll inside their own container so the page never scrolls sideways. */
-export function TableWrap({ children, className }: { children: React.ReactNode; className?: string }) {
+/**
+ * On a phone each row becomes a small card: the first cell is its title and
+ * every other cell is shown under the column name it belongs to. The labels are
+ * copied from the header here, so no page has to repeat them on every cell.
+ */
+export function TableWrap({
+  children,
+  className,
+  stack = true,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  /** Keep a real scrolling table on phones too — for grids read across, not down. */
+  stack?: boolean;
+}) {
+  const ref = React.useRef<HTMLTableElement>(null);
+
+  React.useLayoutEffect(() => {
+    const table = ref.current;
+    if (!table || !stack) return;
+    const label = () => {
+      const heads = [...table.querySelectorAll('thead th')].map((th) => th.textContent?.trim() ?? '');
+      for (const row of table.querySelectorAll('tbody tr, tfoot tr')) {
+        let col = 0;
+        for (const cell of row.children) {
+          const text = heads[col] ?? '';
+          if (cell.getAttribute('data-label') !== text) cell.setAttribute('data-label', text);
+          col += (cell as HTMLTableCellElement).colSpan || 1;
+        }
+      }
+    };
+    label();
+    const observer = new MutationObserver(label);
+    observer.observe(table, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [stack]);
+
   return (
-    <div className={cn('w-full overflow-x-auto rounded-lg border bg-card', className)}>
-      <table className="w-full caption-bottom text-sm">{children}</table>
+    <div className={cn('w-full overflow-x-auto rounded-lg border bg-card', stack && 'stack-table', className)}>
+      <table ref={ref} className="w-full caption-bottom text-sm">
+        {children}
+      </table>
     </div>
   );
 }

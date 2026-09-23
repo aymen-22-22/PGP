@@ -82,7 +82,7 @@ export function CodeScanInput({
           spellCheck={false}
           enterKeyHint="done"
           placeholder="UL-2026-000123"
-          className="tabular h-16 text-center text-xl font-bold tracking-wider"
+          className="tabular h-16 text-center text-xl font-bold tracking-wider placeholder:font-normal placeholder:text-muted-foreground/40"
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {

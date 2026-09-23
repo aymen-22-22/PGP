@@ -196,7 +196,7 @@ export default function SendPage() {
 
         <SelectOrCreate
           id="send-carrier-company"
-          label={t('delivery.carrierCompany')}
+          label={`${t('delivery.carrierCompany')} (${t('common.optional')})`}
           value={deliveryCompanyId}
           onChange={(id) => {
             setDeliveryCompanyId(id);
@@ -206,7 +206,6 @@ export default function SendPage() {
             );
           }}
           options={companies.data?.data ?? []}
-          placeholder={t('common.optional')}
           createLabel={t('delivery.newCompanyInline')}
         >
           {(done) => <NewCompanyForm onDone={(created) => created && done(created)} />}
@@ -214,11 +213,10 @@ export default function SendPage() {
 
         <SelectOrCreate
           id="send-carrier-driver"
-          label={t('delivery.carrierDriver')}
+          label={`${t('delivery.carrierDriver')} (${t('common.optional')})`}
           value={driverId}
           onChange={setDriverId}
           options={driversForCompany}
-          placeholder={t('common.optional')}
           createLabel={t('delivery.newDriverInline')}
         >
           {(done) => (
