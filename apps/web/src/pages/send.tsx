@@ -1,7 +1,8 @@
-import { ArrowLeft, SendHorizontal } from 'lucide-react';
+import { ArrowLeft, PackageOpen, SendHorizontal, Truck } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/page';
+import { StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input, Label, Select } from '@/components/ui/input';
 import { ErrorState, FormError, LoadingState } from '@/components/ui/states';
@@ -228,6 +229,84 @@ export default function SendPage() {
           {t('send.startScanning')}
         </Button>
       </div>
+
+      <SentToday />
     </div>
+  );
+}
+
+interface SentTodayResponse {
+  transfers: {
+    id: string;
+    number: string;
+    status: string;
+    destinationWarehouse: { name: string };
+    shippedAt: string | null;
+    quantity: number;
+    items: { name: string; quantity: number }[];
+  }[];
+  products: { productId: string; name: string; quantity: number }[];
+  total: number;
+}
+
+/** What already left today, so nobody sends the same thing twice. */
+function SentToday() {
+  const { t, dateTime } = useI18n();
+  const query = useApiQuery<SentTodayResponse>('/transfers/sent-today', { refetchInterval: 60_000 });
+  const data = query.data;
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 className="flex items-center gap-2 font-semibold">
+          <Truck className="h-4 w-4 text-orange-500" />
+          {t('send.today.title')}
+        </h2>
+        {data && data.total > 0 && (
+          <span className="text-sm text-muted-foreground">{t('send.today.units', { count: data.total })}</span>
+        )}
+      </div>
+
+      {query.isLoading && <LoadingState />}
+      {query.isError && <ErrorState error={query.error} onRetry={() => void query.refetch()} />}
+      {data && data.transfers.length === 0 && (
+        <div className="flex items-center gap-3 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+          <PackageOpen className="h-5 w-5" />
+          {t('send.today.empty')}
+        </div>
+      )}
+
+      {data && data.products.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {data.products.map((p) => (
+            <span key={p.productId} className="rounded-full bg-orange-50 px-3 py-1 text-sm font-medium text-orange-800">
+              {p.name} <span className="font-bold">×{p.quantity}</span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {data && data.transfers.length > 0 && (
+        <ul className="divide-y overflow-hidden rounded-lg border bg-card">
+          {data.transfers.map((tr) => (
+            <li key={tr.id}>
+              <Link to={`/transfers/${tr.id}`} className="block px-4 py-3 hover:bg-muted/50">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-mono text-sm font-semibold">{tr.number}</span>
+                  <StatusBadge status={tr.status} />
+                </div>
+                <p className="mt-1 text-sm">
+                  → {tr.destinationWarehouse.name}
+                  {tr.shippedAt && <span className="text-muted-foreground"> · {dateTime(tr.shippedAt)}</span>}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {tr.items.map((i) => `${i.name} ×${i.quantity}`).join(', ')}
+                </p>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

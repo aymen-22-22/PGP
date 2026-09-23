@@ -34,6 +34,12 @@ export class TransfersController {
     return this.transfers.list(user, query);
   }
 
+  @Get('sent-today')
+  @ApiOperation({ summary: 'Transfers shipped since midnight from the user’s warehouse(s)' })
+  sentToday(@CurrentUser() user: RequestUser) {
+    return this.transfers.sentToday(user);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Transfer detail with its loaded devices' })
   findOne(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string) {

@@ -67,6 +67,47 @@ export class TransfersService {
   // Reads
   // -------------------------------------------------------------------------
 
+  /** Everything that left the user's warehouse(s) since midnight, for the Send page. */
+  async sentToday(user: RequestUser, now = new Date()) {
+    const midnight = new Date(now);
+    midnight.setHours(0, 0, 0, 0);
+    const rows = await this.prisma.transfer.findMany({
+      where: {
+        ...this.access.filterFor<Prisma.TransferWhereInput>(user, 'sourceWarehouseId'),
+        shipment: { shippedAt: { gte: midnight } },
+      },
+      orderBy: { shipment: { shippedAt: 'desc' } },
+      take: 200,
+      select: {
+        id: true,
+        number: true,
+        status: true,
+        sourceWarehouse: { select: { name: true } },
+        destinationWarehouse: { select: { name: true } },
+        shipment: { select: { shippedAt: true } },
+        items: { select: { quantity: true, product: { select: { id: true, name: true } } } },
+      },
+    });
+    const byProduct = new Map<string, { productId: string; name: string; quantity: number }>();
+    for (const row of rows) {
+      for (const item of row.items) {
+        const entry = byProduct.get(item.product.id) ?? { productId: item.product.id, name: item.product.name, quantity: 0 };
+        entry.quantity += item.quantity;
+        byProduct.set(item.product.id, entry);
+      }
+    }
+    return {
+      transfers: rows.map(({ shipment, items, ...t }) => ({
+        ...t,
+        shippedAt: shipment?.shippedAt ?? null,
+        items: items.map((i) => ({ name: i.product.name, quantity: i.quantity })),
+        quantity: items.reduce((s, i) => s + i.quantity, 0),
+      })),
+      products: [...byProduct.values()].sort((a, b) => b.quantity - a.quantity),
+      total: [...byProduct.values()].reduce((s, p) => s + p.quantity, 0),
+    };
+  }
+
   async list(user: RequestUser, query: QueryTransfersDto): Promise<Paginated<TransferListItem<Date>>> {
     const scope = query.incoming
       ? this.access.filterFor<Prisma.TransferWhereInput>(user, 'destinationWarehouseId', query.warehouseId)

@@ -117,6 +117,18 @@ describe('Transfers and shipments (spec §12–§14)', () => {
     expect(devices.every((d) => d.currentWarehouseId === fixture.central.id)).toBe(true);
   });
 
+  it('lists what was sent today on the Send page', async () => {
+    const transfer = await createTransfer(3).expect(201);
+    const before = await as(app, admin).get('/api/v1/transfers/sent-today').expect(200);
+    expect(before.body.transfers.some((t: { id: string }) => t.id === transfer.body.id)).toBe(false);
+
+    await as(app, admin).post(`/api/v1/transfers/${transfer.body.id}/ship`).expect(200);
+    const after = await as(app, admin).get('/api/v1/transfers/sent-today').expect(200);
+    const row = after.body.transfers.find((t: { id: string }) => t.id === transfer.body.id);
+    expect(row).toMatchObject({ quantity: 3 });
+    expect(after.body.total).toBe(before.body.total + 3);
+  });
+
   it('only lets the destination warehouse receive', async () => {
     const transfer = await createTransfer(3).expect(201);
     await as(app, admin).post(`/api/v1/transfers/${transfer.body.id}/ship`).expect(200);
