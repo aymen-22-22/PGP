@@ -73,6 +73,8 @@ interface Customer {
   name: string;
 }
 
+const TILL_KEY = 'pos.till';
+
 /**
  * The counter till.
  *
@@ -99,16 +101,35 @@ export default function PosPage() {
   const warehouses = useApiQuery<{ id: string; name: string; code: string }[]>('/warehouses', {
     enabled: admin,
   });
-  const [tillId, setTillId] = useState('');
+  // Opens on the till last used here, else the admin's own warehouse, so a
+  // sale can start with a scan instead of a dropdown. Still changeable above.
+  const [storedTill, setTillIdState] = useState(() => {
+    try {
+      return localStorage.getItem(TILL_KEY) ?? user?.warehouseId ?? '';
+    } catch {
+      return user?.warehouseId ?? '';
+    }
+  });
+  // A remembered till that has since been removed must not be sent to the API.
+  const tillId =
+    !warehouses.data || warehouses.data.some((w) => w.id === storedTill) ? storedTill : '';
+  const setTillId = (id: string) => {
+    setTillIdState(id);
+    try {
+      localStorage.setItem(TILL_KEY, id);
+    } catch {
+      // Private mode: the choice just isn't remembered.
+    }
+  };
   const shopId = admin ? tillId : (user?.warehouseId ?? '');
 
   const today = useApiQuery<TodayResult>(
     shopId ? `/pos/today?warehouseId=${shopId}` : '/pos/today',
-    { enabled: !admin || Boolean(tillId) },
+    { enabled: !admin || (Boolean(tillId) && Boolean(warehouses.data)) },
   );
   const shelf = useApiQuery<{ data: Accessory[] }>(
     shopId ? `/pos/accessories?warehouseId=${shopId}` : '/pos/accessories',
-    { enabled: !admin || Boolean(tillId) },
+    { enabled: !admin || (Boolean(tillId) && Boolean(warehouses.data)) },
   );
   const customers = useApiQuery<{ data: Customer[] }>('/customers?pageSize=200');
 

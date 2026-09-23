@@ -1,7 +1,7 @@
 import { LogOut } from 'lucide-react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/lib/auth';
+import { isAdmin, useAuth } from '@/lib/auth';
 import { useT } from '@/i18n/provider';
 import { navigationFor } from '@/lib/navigation';
 import { cn } from '@/lib/utils';
@@ -21,7 +21,7 @@ export function DesktopLayout() {
         <div className="border-b px-5 py-4">
           <p className="text-lg font-bold tracking-tight">Phone ERP</p>
           <p className="truncate text-xs text-muted-foreground">
-            {user?.warehouseName ?? 'All warehouses'}
+            {isAdmin(user) ? t('more.allWarehouses') : (user?.warehouseName ?? t('more.allWarehouses'))}
           </p>
         </div>
 

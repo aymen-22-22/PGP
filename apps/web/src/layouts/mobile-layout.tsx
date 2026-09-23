@@ -78,14 +78,14 @@ export function MobileLayout() {
       <header className="sticky top-0 z-30 border-b bg-card/95 pt-safe backdrop-blur print:hidden">
         <div className="flex items-center justify-between gap-3 px-4 py-2.5">
           <div className="min-w-0">
-            <p className="truncate text-base font-bold leading-tight">{user?.warehouseName ?? 'Phone ERP'}</p>
+            <p className="truncate text-base font-bold leading-tight">{isAdmin(user) ? t('more.allWarehouses') : (user?.warehouseName ?? 'Phone ERP')}</p>
             <p className="truncate text-xs text-muted-foreground">{user?.name}</p>
           </div>
 
           {/* Home and More sit up here rather than in the bar, so all five
               bottom slots go to the work itself. */}
           <nav className="flex shrink-0 items-center gap-1" aria-label="Shortcuts">
-            <HeaderLink to="/" label={t('nav.home')} icon={Home} end />
+            {!tabs.some((tab) => tab.to === '/') && <HeaderLink to="/" label={t('nav.home')} icon={Home} end />}
             <HeaderLink to="/more" label={t('nav.more')} icon={MoreHorizontal} />
           </nav>
         </div>

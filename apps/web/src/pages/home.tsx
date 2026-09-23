@@ -1,7 +1,7 @@
 import { ArrowDownToLine, Package, ScanLine, Truck, Wallet } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Stat, StatGrid } from '@/components/ui/stat';
 import { ErrorState, LoadingState } from '@/components/ui/states';
 import { TableWrap, Td, Th, Tr } from '@/components/ui/table';
@@ -157,35 +157,6 @@ export default function HomePage() {
         </section>
       )}
 
-      {!admin && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">{t('home.today')}</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-2">
-            <Button asChild variant="outline" size="lg" className="justify-between">
-              <Link to="/receive">
-                {t('home.incomingShipments')}
-                <span className="tabular font-bold">{formatNumber(movement.pendingReceipts)}</span>
-              </Link>
-            </Button>
-            <Button asChild variant="outline" size="lg" className="justify-between">
-              <Link to="/stock">
-                {t('home.myStock')}
-                <span className="tabular font-bold">{formatNumber(totals.available)}</span>
-              </Link>
-            </Button>
-            {/* Not Sales: this account cannot open it, and what it actually
-                does with stock on the way out is send it. */}
-            <Button asChild variant="outline" size="lg" className="justify-between">
-              <Link to="/send">
-                {t('nav.send')}
-                <span className="tabular font-bold">{formatNumber(movement.outgoing)}</span>
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }
