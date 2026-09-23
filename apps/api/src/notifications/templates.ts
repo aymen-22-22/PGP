@@ -21,7 +21,7 @@ export interface LineItem {
 export interface MessageFacts {
   /** What happened, in the reader's words. */
   headline: string;
-  /** The document this concerns, e.g. "RCP-2026-000014". */
+  /** The document this concerns, e.g. "RCP-iphone18promax-26112025-10". */
   reference: string;
   /** Rows of label/value shown above the products. */
   facts: { label: string; value: string }[];
@@ -150,83 +150,105 @@ export function renderMessage(facts: MessageFacts): { html: string; text: string
   const hidden = facts.lines.length - shown.length;
   const totalUnits = facts.lines.reduce((sum, l) => sum + l.quantity, 0);
 
-  const factRows = facts.facts
-    .map(
-      (f) => `
-        <tr>
-          <td style="padding:4px 16px 4px 0;color:${MUTED};font-size:13px;white-space:nowrap;">${escape(f.label)}</td>
-          <td style="padding:4px 0;color:${INK};font-size:13px;font-weight:600;">${escape(f.value)}</td>
-        </tr>`,
-    )
-    .join('');
+  const area = facts.journey ? AREA[facts.journey.area] : null;
+  const accent = area?.colour ?? INK;
+  const soft = area?.soft ?? '#f1f5f9';
+
+  // Two facts per row, as small cards: easier to scan on a phone than a list.
+  const factCells = facts.facts.map(
+    (f) => `
+          <td width="50%" valign="top" style="padding:4px;">
+            <div style="background:#f8fafc;border:1px solid ${RULE};border-radius:8px;padding:10px 12px;">
+              <div style="font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:${MUTED};">${escape(f.label)}</div>
+              <div style="font-size:14px;font-weight:700;color:${INK};margin-top:2px;">${escape(f.value)}</div>
+            </div>
+          </td>`,
+  );
+  const factRows = Array.from({ length: Math.ceil(factCells.length / 2) }, (_, i) =>
+    `<tr>${factCells[i * 2]}${factCells[i * 2 + 1] ?? '<td width="50%"></td>'}</tr>`,
+  ).join('');
 
   const lineRows = shown
     .map(
-      (l, i) => `
-        <tr style="background:${i % 2 ? '#f7f8fa' : '#ffffff'};">
-          <td style="padding:8px 10px;border-bottom:1px solid ${RULE};font-size:13px;color:${INK};">
-            ${escape(l.product)}
-            ${l.detail ? `<div style="color:${MUTED};font-size:12px;font-family:monospace;">${escape(l.detail)}</div>` : ''}
+      (l) => `
+        <tr>
+          <td style="padding:10px 12px;border-bottom:1px solid ${RULE};">
+            <div style="font-size:14px;font-weight:600;color:${INK};">${escape(l.product)}</div>
+            <div style="font-size:12px;color:${MUTED};font-family:monospace;margin-top:2px;">${escape(l.sku)}${l.detail ? ` &middot; ${escape(l.detail)}` : ''}</div>
           </td>
-          <td style="padding:8px 10px;border-bottom:1px solid ${RULE};font-size:12px;color:${MUTED};font-family:monospace;white-space:nowrap;">${escape(l.sku)}</td>
-          <td align="right" style="padding:8px 10px;border-bottom:1px solid ${RULE};font-size:13px;color:${INK};font-weight:600;">${l.quantity.toLocaleString('en-GB')}</td>
+          <td align="right" valign="middle" style="padding:10px 12px;border-bottom:1px solid ${RULE};white-space:nowrap;">
+            <span style="display:inline-block;min-width:28px;text-align:center;background:${soft};color:${accent};font-size:13px;font-weight:700;padding:4px 10px;border-radius:999px;">&times;${l.quantity.toLocaleString('en-GB')}</span>
+          </td>
         </tr>`,
     )
     .join('');
 
-  const area = facts.journey ? AREA[facts.journey.area] : null;
-  const accent = area?.colour ?? INK;
+  const tile = (value: string, label: string) => `
+          <td width="50%" style="padding:4px;">
+            <div style="background:${soft};border-radius:10px;padding:12px 14px;">
+              <div style="font-size:24px;font-weight:800;color:${accent};line-height:1.1;">${value}</div>
+              <div style="font-size:12px;color:${MUTED};margin-top:2px;">${label}</div>
+            </div>
+          </td>`;
+
+  const preheader = [facts.alert, ...facts.facts.slice(0, 2).map((f) => `${f.label}: ${f.value}`)]
+    .filter(Boolean)
+    .join(' · ');
 
   const html = `<!doctype html>
 <html>
-<body style="margin:0;padding:24px 12px;background:#eef0f4;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid ${RULE};border-radius:10px;">
+<head><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"></head>
+<body style="margin:0;padding:24px 12px;background:#eef1f6;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escape(preheader)}</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;margin:0 auto;">
+    <tr><td style="padding:0 4px 12px;">
+      <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+        <td width="28" height="28" align="center" valign="middle" style="width:28px;height:28px;background:${INK};border-radius:7px;color:#fff;font-size:13px;font-weight:800;">P</td>
+        <td style="padding-left:8px;font-size:14px;font-weight:700;color:${INK};">Phone ERP</td>
+      </tr></table>
+    </td></tr>
+  </table>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid ${RULE};border-radius:14px;overflow:hidden;box-shadow:0 4px 18px rgba(15,23,42,.06);">
     <tr>
-      <td style="padding:22px 24px;background:${accent};border-radius:10px 10px 0 0;">
-        <div style="font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:rgba(255,255,255,.8);">Phone ERP${area ? ` &middot; ${area.label}` : ''}</div>
-        <div style="font-size:22px;font-weight:700;color:#ffffff;line-height:1.3;margin-top:4px;">${area ? `${area.icon}&nbsp; ` : ''}${escape(facts.headline)}</div>
-        <div style="font-size:13px;color:rgba(255,255,255,.85);font-family:monospace;margin-top:4px;">${escape(facts.reference)}</div>
+      <td bgcolor="${accent}" style="padding:26px 24px 22px;background:${accent};background-image:linear-gradient(135deg,${accent} 0%,${INK} 140%);">
+        ${area ? `<div style="display:inline-block;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#ffffff;background:rgba(255,255,255,.18);padding:4px 10px;border-radius:999px;">${area.icon}&nbsp; ${area.label}</div>` : ''}
+        <div style="font-size:24px;font-weight:800;color:#ffffff;line-height:1.25;margin-top:12px;">${escape(facts.headline)}</div>
+        <div style="margin-top:10px;"><span style="display:inline-block;font-size:13px;font-weight:700;color:${accent};background:#ffffff;font-family:monospace;padding:5px 10px;border-radius:6px;">${escape(facts.reference)}</span></div>
       </td>
     </tr>
     ${facts.journey ? renderJourney(facts.journey) : ''}
     ${
       facts.alert
-        ? `<tr><td style="padding:12px 24px;background:${ALERT_BG};border-bottom:1px solid ${RULE};">
-             <div style="font-size:13px;color:${ALERT};font-weight:600;">${escape(facts.alert)}</div>
+        ? `<tr><td style="padding:12px 24px 0;">
+             <div style="background:${ALERT_BG};border-left:4px solid ${ALERT};border-radius:6px;padding:12px 14px;font-size:14px;color:${ALERT};font-weight:600;">&#9888;&#65039;&nbsp; ${escape(facts.alert)}</div>
            </td></tr>`
         : ''
     }
+    <tr><td style="padding:16px 20px 0;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+        ${tile(totalUnits.toLocaleString('en-GB'), totalUnits === 1 ? 'unit' : 'units')}
+        ${tile(facts.lines.length.toLocaleString('en-GB'), facts.lines.length === 1 ? 'product' : 'products')}
+      </tr></table>
+    </td></tr>
+    ${factRows ? `<tr><td style="padding:4px 20px 0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${factRows}</table></td></tr>` : ''}
     <tr>
       <td style="padding:16px 24px 4px;">
-        <table role="presentation" cellpadding="0" cellspacing="0">${factRows}</table>
-      </td>
-    </tr>
-    <tr>
-      <td style="padding:12px 24px 4px;">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
-          <tr>
-            <th align="left" style="padding:6px 10px;font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:${MUTED};border-bottom:1px solid ${RULE};">Product</th>
-            <th align="left" style="padding:6px 10px;font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:${MUTED};border-bottom:1px solid ${RULE};">SKU</th>
-            <th align="right" style="padding:6px 10px;font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:${MUTED};border-bottom:1px solid ${RULE};">Qty</th>
-          </tr>
+        <div style="font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:${MUTED};padding:0 0 6px;">What's inside</div>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:1px solid ${RULE};border-radius:8px;">
           ${lineRows}
-          <tr>
-            <td colspan="2" style="padding:8px 10px;font-size:13px;font-weight:700;color:${INK};">Total</td>
-            <td align="right" style="padding:8px 10px;font-size:13px;font-weight:700;color:${INK};">${totalUnits.toLocaleString('en-GB')}</td>
-          </tr>
         </table>
-        ${hidden > 0 ? `<div style="font-size:12px;color:${MUTED};padding:6px 10px;">and ${hidden} more line${hidden === 1 ? '' : 's'} — open it in the app to see them all.</div>` : ''}
+        ${hidden > 0 ? `<div style="font-size:12px;color:${MUTED};padding:8px 2px;">and ${hidden} more line${hidden === 1 ? '' : 's'} — open it in the app to see them all.</div>` : ''}
       </td>
     </tr>
     ${
       facts.link
-        ? `<tr><td style="padding:12px 24px 24px;">
-             <a href="${escape(facts.link)}" style="display:inline-block;background:${accent};color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:12px 22px;border-radius:8px;">${escape(facts.linkLabel ?? 'Open in the app')}</a>
+        ? `<tr><td align="center" style="padding:20px 24px 26px;">
+             <a href="${escape(facts.link)}" style="display:inline-block;background:${accent};color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 28px;border-radius:10px;">${escape(facts.linkLabel ?? 'Open in the app')} &rarr;</a>
            </td></tr>`
-        : ''
+        : '<tr><td style="padding:8px;"></td></tr>'
     }
     <tr>
-      <td style="padding:14px 24px;border-top:1px solid ${RULE};font-size:11px;color:${MUTED};">
+      <td style="padding:14px 24px;background:#f8fafc;border-top:1px solid ${RULE};font-size:11px;color:${MUTED};text-align:center;">
         Sent automatically when this happened. Turn these off under More → your account.
       </td>
     </tr>

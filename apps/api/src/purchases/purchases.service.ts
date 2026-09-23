@@ -173,7 +173,7 @@ export class PurchasesService {
     const totalAmount = items.reduce((sum, i) => add(sum, i.totalPrice), '0.00');
 
     const purchase = await this.prisma.$transaction(async (tx) => {
-      const number = await this.numbers.next(tx, 'PO');
+      const number = await this.numbers.next(tx, 'PO', items);
       return tx.purchase.create({
         data: {
           number,
@@ -386,7 +386,11 @@ export class PurchasesService {
 
     const result = await this.prisma.$transaction(
       async (tx) => {
-        const receiptNumber = await this.numbers.next(tx, 'RCP');
+        const receiptNumber = await this.numbers.next(
+          tx,
+          'RCP',
+          perLine.map((l) => ({ productId: l.productId, quantity: l.quantity })),
+        );
 
         // One lot per product received in this batch. The lot is the handle a
         // later freight or customs bill is pointed at, and it carries the price
@@ -395,7 +399,9 @@ export class PurchasesService {
         const lotByItem = new Map<string, string>();
         for (const line of perLine) {
           if (line.quantity === 0) continue;
-          const lotNumber = await this.numbers.next(tx, 'LOT');
+          const lotNumber = await this.numbers.next(tx, 'LOT', [
+            { productId: line.productId, quantity: line.quantity },
+          ]);
           const lot = await tx.lot.create({
             data: {
               number: lotNumber,

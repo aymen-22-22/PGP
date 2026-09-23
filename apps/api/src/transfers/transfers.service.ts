@@ -213,8 +213,8 @@ export class TransfersService {
     }
 
     const transfer = await this.prisma.$transaction(async (tx) => {
-      const number = await this.numbers.next(tx, 'TR');
-      const shipmentNumber = await this.numbers.next(tx, 'SHP');
+      const number = await this.numbers.next(tx, 'TR', dto.items);
+      const shipmentNumber = await this.numbers.next(tx, 'SHP', dto.items);
       return tx.transfer.create({
         data: {
           number,
@@ -810,7 +810,9 @@ export class TransfersService {
           })),
         );
 
-        const receiptNumber = await this.numbers.next(tx, 'RCP');
+        const receiptNumber = await this.numbers.next(tx, 'RCP', {
+          deviceIds: toReceive.map((l) => l.deviceId),
+        });
         const receipt = await tx.receipt.create({
           data: {
             number: receiptNumber,
