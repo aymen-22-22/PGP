@@ -118,7 +118,7 @@ export default function CostsPage() {
               <li key={doc.id} className="flex flex-wrap items-center gap-3 px-3 py-3">
                 <div className="min-w-0 flex-1">
                   <p className="tabular font-semibold">
-                    {doc.number} · {doc.type}
+                    {doc.number} · {t(`cost.type.${doc.type}`)}
                   </p>
                   <p className="truncate text-sm text-muted-foreground">
                     {doc.description ?? '—'}
@@ -256,9 +256,9 @@ function NewCostForm({ lots, onDone }: { lots: Lot[]; onDone: () => void }) {
           <div className="space-y-1.5">
             <Label htmlFor="cost-type">{t('costs.type')}</Label>
             <Select id="cost-type" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-              {TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
+              {TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {t(`cost.type.${type}`)}
                 </option>
               ))}
             </Select>

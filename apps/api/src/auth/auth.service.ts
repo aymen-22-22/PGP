@@ -123,6 +123,7 @@ export class AuthService {
         printerConnectionType: user.printerConnectionType,
         printerAddress: user.printerAddress,
         printerLabelSize: user.printerLabelSize,
+        language: user.language,
       },
       accessToken: this.jwt.sign(payload, { expiresIn: this.config.jwt.expiresIn }),
       csrfToken: randomBytes(24).toString('hex'),
@@ -161,6 +162,7 @@ export class AuthService {
       printerConnectionType: user.printerConnectionType,
       printerAddress: user.printerAddress,
       printerLabelSize: user.printerLabelSize,
+      language: user.language,
     };
   }
 
@@ -226,6 +228,7 @@ export class AuthService {
       printerConnectionType?: PrinterConnectionType;
       printerAddress?: string;
       printerLabelSize?: string;
+      language?: string;
     },
   ) {
     const updated = await this.prisma.user.update({
@@ -236,6 +239,7 @@ export class AuthService {
         // An empty string clears the address (switching back to BROWSER, say).
         ...(dto.printerAddress !== undefined ? { printerAddress: dto.printerAddress || null } : {}),
         ...(dto.printerLabelSize !== undefined ? { printerLabelSize: dto.printerLabelSize } : {}),
+        ...(dto.language !== undefined ? { language: dto.language } : {}),
       },
       select: {
         id: true,
@@ -243,6 +247,7 @@ export class AuthService {
         printerConnectionType: true,
         printerAddress: true,
         printerLabelSize: true,
+        language: true,
       },
     });
     return updated;

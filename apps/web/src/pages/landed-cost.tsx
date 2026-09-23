@@ -7,7 +7,6 @@ import { ErrorState, LoadingState } from '@/components/ui/states';
 import { TableWrap, Td, Th, Tr } from '@/components/ui/table';
 import { useApiQuery } from '@/hooks/use-api';
 import { useI18n } from '@/i18n/provider';
-import { titleCase } from '@/lib/utils';
 
 interface Statement {
   document: { kind: string; title: string; reference: string; generatedAt: string; note: string };
@@ -127,7 +126,7 @@ export default function LandedCostPage() {
                 <li key={`${leg.type}-${index}`} className="relative pb-4 last:pb-0">
                   <span className="absolute -start-[1.6rem] mt-1.5 h-3 w-3 rounded-full border-2 border-border bg-card" />
                   <p className="text-sm font-medium">
-                    {titleCase(leg.type)}
+                    {t(`journey.move.${leg.type}`, { to: leg.to ?? leg.from ?? '' })}
                     {' · '}
                     <span className="font-normal text-muted-foreground">
                       {leg.from && leg.to ? `${leg.from} → ${leg.to}` : (leg.to ?? leg.from ?? '—')}
@@ -166,7 +165,7 @@ export default function LandedCostPage() {
                 {c.components.map((comp) => (
                   <Tr key={comp.costDocumentId}>
                     <Td>
-                      <span className="font-medium">{titleCase(comp.type)}</span>
+                      <span className="font-medium">{t(`cost.type.${comp.type}`)}</span>
                       {comp.description && (
                         <span className="block text-xs text-muted-foreground">{comp.description}</span>
                       )}
