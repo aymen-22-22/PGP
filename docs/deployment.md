@@ -568,3 +568,33 @@ has no dependency on it.
 - **Logs.** The API logs to stdout; your panel captures it. Warnings carry the
   method, path, status and error code, which is enough to find any failed
   request in the audit log.
+
+## 9. Logs: when the site fails and comes back
+
+The API writes its own daily log files to **`logs/app-YYYY-MM-DD.log`** in the
+application root (`~/PGP-erp/logs/`), kept for 14 days. They do not depend on
+where the host sends stdout, so they survive the "could not be started" page.
+
+What goes in: every start (Node version, memory), every stop and why — a signal
+from the host, a crash, or a clean exit — start-up failures with the real
+reason (bad config, database unreachable), every 5xx with its stack, requests
+slower than 3 s, and a heartbeat every 5 minutes with memory, request and error
+counts.
+
+Read them in the app under **Settings → Server logs** (admins), or over SSH:
+
+```bash
+tail -f ~/PGP-erp/logs/app-$(date -u +%F).log
+grep '"level":"fatal"\|"level":"error"' ~/PGP-erp/logs/app-*.log | tail
+```
+
+Reading the pattern:
+
+- `Received SIGTERM` then `Starting` → the host stopped the app (idle timeout,
+  a deploy, or its resource limits); look at the memory in the heartbeat before it.
+- `Could not start: …` → the reason Passenger only calls "could not be started".
+- `Uncaught exception` → a bug; the stack trace is on the same line.
+- Heartbeat memory climbing towards the plan's limit → the host will kill it.
+
+Settings: `LOG_DIR`, `LOG_KEEP_DAYS` (14), `LOG_SLOW_MS` (3000),
+`LOG_HEARTBEAT_MS` (300000), `LOG_MEMORY_WARN_MB` (400), `LOG_DEBUG`.

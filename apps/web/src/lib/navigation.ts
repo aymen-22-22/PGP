@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   Coins,
   FileClock,
+  HeartPulse,
   Inbox,
   LayoutDashboard,
   Mail,
@@ -86,6 +87,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { to: '/users', label: 'nav.users', icon: Users },
       { to: '/notifications', label: 'nav.notifications', icon: Mail },
       { to: '/audit-logs', label: 'nav.audit', icon: FileClock },
+      { to: '/system-logs', label: 'nav.systemLogs', icon: HeartPulse },
     ],
   },
 ];

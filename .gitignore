@@ -18,3 +18,6 @@ apps/api/.env.test
 # Local tooling configuration.
 .claude/
 tmp/
+
+# Runtime log files written by the API (see apps/api/src/logging)
+logs/

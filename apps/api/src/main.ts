@@ -9,15 +9,19 @@ import { join, resolve } from 'node:path';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { loadConfiguration, validateConfiguration } from './config/configuration';
+import { describeError, writeLog } from './logging/file-log';
+import { FileLogger, installProcessMonitor, requestMonitor } from './logging/process-monitor';
 import { PrismaService } from './prisma/prisma.service';
 
 async function bootstrap(): Promise<void> {
+  installProcessMonitor();
   const config = loadConfiguration();
   validateConfiguration(config);
 
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    logger: config.nodeEnv === 'production' ? ['log', 'warn', 'error'] : ['log', 'warn', 'error', 'debug'],
-  });
+  const logger = new FileLogger();
+  logger.setLogLevels(FileLogger.levels(config.nodeEnv === 'production'));
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { logger });
+  app.use(requestMonitor);
 
   // Behind a shared-hosting reverse proxy, req.ip must come from X-Forwarded-For
   // or rate limiting and audit logs would record the proxy for every user.
@@ -132,15 +136,22 @@ async function bootstrap(): Promise<void> {
 
   await app.listen(config.port, config.host);
 
-  const logger = new Logger('Bootstrap');
-  logger.log(`API listening on ${config.host}:${config.port} (${config.nodeEnv})`);
-  logger.log(`Base path: /${config.apiPrefix}`);
-  if (config.webRoot) logger.log(`Serving the web app from ${resolve(config.webRoot)}`);
-  if (config.swaggerEnabled) logger.log('Swagger UI: /api/docs');
-  logger.log(
+  const boot = new Logger('Bootstrap');
+  boot.log(`API listening on ${config.host}:${config.port} (${config.nodeEnv})`);
+  boot.log(`Base path: /${config.apiPrefix}`);
+  if (config.webRoot) boot.log(`Serving the web app from ${resolve(config.webRoot)}`);
+  if (config.swaggerEnabled) boot.log('Swagger UI: /api/docs');
+  boot.log(
     `Receipt validation: ${config.receiving.requireValidation ? 'required' : 'automatic'}; ` +
       `partial receipts ${config.receiving.allowPartial ? 'allowed' : 'blocked'}`,
   );
 }
 
-void bootstrap();
+// A start-up failure (bad config, database unreachable) is exactly the case the
+// host reports only as "could not be started" — so it is written down first.
+bootstrap().catch((error: unknown) => {
+  const { msg, stack } = describeError(error);
+  writeLog('fatal', 'Bootstrap', `Could not start: ${msg}`, stack);
+  console.error(error);
+  process.exit(1);
+});
