@@ -1,5 +1,5 @@
 import { BarcodeFormat, MultiFormatWriter } from '@zxing/library';
-import { ArrowLeft, Printer, Tags } from 'lucide-react';
+import { ArrowLeft, FileDown, Printer, Tags } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -75,6 +75,10 @@ function CodeSymbol({ value, size = 96 }: { value: string; size?: number }) {
  * not a guess in unrelated pixels that happened to look right at one size.
  */
 const MM_TO_PX = 96 / 25.4;
+
+/** A touch screen that is not a desktop: where the browser print dialog cannot be trusted with label sizes. */
+const isPhone = () =>
+  typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches && window.innerWidth < 1024;
 const mm = (value: number) => value * MM_TO_PX;
 
 /**
@@ -98,6 +102,7 @@ export default function PurchaseLabelsPage() {
 
   const printViaNetwork = useApiMutation(() => api.post(`/purchases/${id}/labels/print`, {}), ['/purchases']);
   const [printingViaAgent, setPrintingViaAgent] = useState(false);
+  const [makingPdf, setMakingPdf] = useState(false);
 
   if (query.isLoading) return <LoadingState label={t('labels.loading')} />;
   if (query.isError) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
@@ -135,7 +140,39 @@ export default function PurchaseLabelsPage() {
     }
   };
 
+  // Phones ignore the page size a web page asks for, so they get a PDF that
+  // carries it — the one kind of file every phone prints at the right size.
+  const printPdf = async () => {
+    const tab = window.open('', '_blank');
+    setMakingPdf(true);
+    try {
+      const { buildLabelPdf } = await import('@/lib/label-pdf');
+      const bytes = await buildLabelPdf(
+        sheet.data.map((label) => ({
+          code: label.code,
+          name: label.product.name,
+          subtitle: [label.product.storage, label.product.color].filter(Boolean).join(' · '),
+          footer: `${label.sequence}/${label.of} · ${sheet.purchase.number}`,
+        })),
+        size.width,
+        size.height,
+      );
+      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+      if (tab) tab.location.href = url;
+      else window.location.href = url;
+    } catch (error) {
+      tab?.close();
+      toast.push('error', error instanceof Error ? error.message : String(error));
+    } finally {
+      setMakingPdf(false);
+    }
+  };
+
   const print = () => {
+    if (connection === 'BROWSER' && isPhone()) {
+      void printPdf();
+      return;
+    }
     if (connection === 'NETWORK') {
       printViaNetwork.mutate(undefined, {
         onSuccess: () => toast.push('success', t('labels.printed')),
@@ -148,7 +185,7 @@ export default function PurchaseLabelsPage() {
     }
   };
 
-  const printing = printViaNetwork.isPending || printingViaAgent;
+  const printing = printViaNetwork.isPending || printingViaAgent || makingPdf;
 
   return (
     <div className="mx-auto max-w-4xl space-y-5 print:m-0 print:max-w-none print:space-y-0">
@@ -167,7 +204,7 @@ export default function PurchaseLabelsPage() {
               </Label>
               <Select
                 id="label-size"
-                className="h-8 w-auto"
+                className="h-10 w-auto py-1 text-sm"
                 value={sizeId}
                 onChange={(e) => setSizeId(e.target.value as typeof sizeId)}
               >
@@ -181,6 +218,10 @@ export default function PurchaseLabelsPage() {
             <Button className="gap-2" onClick={print} disabled={printing}>
               <Printer className="h-4 w-4" />
               {printing ? t('common.saving') : t('labels.print')}
+            </Button>
+            <Button variant="outline" className="gap-2" onClick={() => void printPdf()} disabled={printing}>
+              <FileDown className="h-4 w-4" />
+              PDF
             </Button>
           </div>
         )}
@@ -212,7 +253,7 @@ export default function PurchaseLabelsPage() {
               // allowed to wrap onto a second line rather than truncate: a
               // human reading it as a QR-scan fallback needs every character.
               const colWidthMm = size.width - qrMm - 4;
-              const codeMm = Math.max(1.4, Math.min(size.height * 0.1, colWidthMm / (label.code.length * 0.62)));
+              const codeMm = Math.max(1.4, Math.min(size.height * 0.1, colWidthMm / (label.code.length * 0.72)));
               return (
                 <div
                   key={label.id}
@@ -239,7 +280,7 @@ export default function PurchaseLabelsPage() {
                         {subtitle}
                       </p>
                     )}
-                    <p className="tabular w-full break-all font-bold leading-tight" style={{ fontSize: mm(codeMm) }}>
+                    <p className="tabular w-full whitespace-nowrap font-bold leading-tight" style={{ fontSize: mm(codeMm) }}>
                       {label.code}
                     </p>
                     <p className="w-full truncate leading-none" style={{ fontSize: mm(size.height * 0.05) }}>

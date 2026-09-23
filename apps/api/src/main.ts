@@ -13,6 +13,18 @@ import { describeError, writeLog } from './logging/file-log';
 import { FileLogger, installProcessMonitor, requestMonitor } from './logging/process-monitor';
 import { PrismaService } from './prisma/prisma.service';
 
+/**
+ * Keep the thread count small enough for shared hosting.
+ *
+ * Prisma's query engine starts one worker thread per CPU core of the machine
+ * — dozens on a shared host — and the account's thread cap stops it partway,
+ * which it reports as "PANIC: timer has gone away" and the host as "could not
+ * be started". Two workers are plenty for this application. Set before the
+ * engine loads; an explicit value in the environment still wins.
+ */
+process.env.TOKIO_WORKER_THREADS ??= '2';
+process.env.UV_THREADPOOL_SIZE ??= '2';
+
 async function bootstrap(): Promise<void> {
   installProcessMonitor();
   const config = loadConfiguration();
@@ -151,7 +163,10 @@ async function bootstrap(): Promise<void> {
 // host reports only as "could not be started" — so it is written down first.
 bootstrap().catch((error: unknown) => {
   const { msg, stack } = describeError(error);
-  writeLog('fatal', 'Bootstrap', `Could not start: ${msg}`, stack);
+  const hint = /timer has gone away|Resource temporarily unavailable|EAGAIN/i.test(msg)
+    ? ' — the host refused more threads/processes: stop leftover processes (ps -u $USER) and lower TOKIO_WORKER_THREADS'
+    : '';
+  writeLog('fatal', 'Bootstrap', `Could not start: ${msg}${hint}`, stack);
   console.error(error);
   process.exit(1);
 });

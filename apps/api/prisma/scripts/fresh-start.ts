@@ -15,6 +15,10 @@
  */
 import { PrismaClient } from '@prisma/client';
 
+// Shared hosts cap threads; see the note in src/main.ts.
+process.env.TOKIO_WORKER_THREADS ??= '1';
+process.env.UV_THREADPOOL_SIZE ??= '1';
+
 const prisma = new PrismaClient();
 
 const TRANSACTIONAL = [

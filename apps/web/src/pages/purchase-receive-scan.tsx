@@ -1,8 +1,10 @@
 import { ArrowLeft, CheckCircle2, PackageCheck, XCircle } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { CodeScanInput } from '@/features/scanner/code-scan-input';
+import { scanFeedback } from '@/features/scanner/feedback';
+import type { CodeOutcome } from '@/features/scanner/use-code-buffer';
 import { ErrorState, LoadingState } from '@/components/ui/states';
 import { useApiMutation, useApiQuery } from '@/hooks/use-api';
 import { useI18n } from '@/i18n/provider';
@@ -46,46 +48,32 @@ export default function PurchaseReceiveScanPage() {
   const { t } = useI18n();
   const { id } = useParams<{ id: string }>();
   const query = useApiQuery<PurchaseSummary>(`/purchases/${id}`);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [value, setValue] = useState('');
   const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [lastError, setLastError] = useState<string | null>(null);
-  const [flashKey, setFlashKey] = useState(0);
+  const [outcome, setOutcome] = useState<CodeOutcome | null>(null);
 
   const scan = useApiMutation<ScanResult, { code: string }>(
     (body) => api.post(`/purchases/${id}/receive-by-label`, body),
     ['/purchases'],
   );
 
-  useEffect(() => {
-    const focus = () => inputRef.current?.focus();
-    focus();
-    const interval = setInterval(() => {
-      if (document.activeElement !== inputRef.current) focus();
-    }, 1200);
-    return () => clearInterval(interval);
-  }, []);
-
   const submit = (code: string) => {
     const trimmed = code.trim();
     if (!trimmed || scan.isPending) return;
-    setValue('');
     scan.mutate(
       { code: trimmed },
       {
         onSuccess: (result) => {
-          setLastError(null);
+          setOutcome({ kind: 'accepted', code: result.code });
+          scanFeedback('accepted');
           setHistory((current) => [
             { key: Date.now(), code: result.code, productName: result.product.name, at: new Date() },
             ...current,
           ]);
-          setFlashKey((k) => k + 1);
-          inputRef.current?.focus();
         },
         onError: (error) => {
-          setLastError(error instanceof ApiRequestError ? error.message : t('receiveScan.error'));
-          setFlashKey((k) => k + 1);
-          inputRef.current?.focus();
+          const reason = error instanceof ApiRequestError ? error.message : t('receiveScan.error');
+          setOutcome({ kind: 'stray', code: trimmed, reason });
+          scanFeedback('rejected');
         },
       },
     );
@@ -98,7 +86,6 @@ export default function PurchaseReceiveScanPage() {
   const expected = purchase.items.reduce((sum, i) => sum + i.quantity, 0);
   const received = purchase.items.reduce((sum, i) => sum + i.receivedQuantity, 0);
   const remaining = Math.max(0, expected - received);
-  const lastSuccess = scan.isSuccess && !lastError ? scan.data : null;
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
@@ -116,47 +103,15 @@ export default function PurchaseReceiveScanPage() {
       </div>
 
       <div className="space-y-3 rounded-lg border border-border bg-card p-4">
-        <label htmlFor="label-scan-input" className="text-sm font-semibold">
-          {t('receiveScan.input')}
-        </label>
-        <div className="flex gap-2">
-          <Input
-            id="label-scan-input"
-            ref={inputRef}
-            value={value}
-            disabled={remaining === 0}
-            autoComplete="off"
-            autoCorrect="off"
-            spellCheck={false}
-            enterKeyHint="done"
-            placeholder="UL-2026-000123"
-            className="tabular h-16 text-center text-xl font-bold tracking-wider"
-            onChange={(event) => setValue(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                submit(value);
-              }
-            }}
-          />
-          <Button size="lg" className="h-16 px-6" disabled={!value.trim() || scan.isPending} onClick={() => submit(value)}>
-            {t('receiveScan.add')}
-          </Button>
-        </div>
-
         {remaining === 0 ? (
-          <Feedback key={flashKey} ok title={t('receiveScan.complete')} />
-        ) : lastError ? (
-          <Feedback key={flashKey} title={lastError} />
-        ) : lastSuccess ? (
-          <Feedback
-            key={flashKey}
-            ok
-            title={lastSuccess.product.name}
-            detail={[lastSuccess.product.color, lastSuccess.product.storage].filter(Boolean).join(' · ')}
-          />
+          <Feedback ok title={t('receiveScan.complete')} />
         ) : (
-          <p className="text-sm text-muted-foreground">{t('receiveScan.ready')}</p>
+          <CodeScanInput
+            label={t('receiveScan.input')}
+            onScan={submit}
+            outcome={outcome}
+            disabled={scan.isPending}
+          />
         )}
       </div>
 
