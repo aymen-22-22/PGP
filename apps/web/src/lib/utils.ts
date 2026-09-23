@@ -1,5 +1,11 @@
 import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import { extendTailwindMerge } from 'tailwind-merge';
+
+// Without this, tailwind-merge reads `text-stat` as a colour and drops it when a
+// real colour like `text-success` follows — every headline figure shrank to body size.
+const twMerge = extendTailwindMerge({
+  extend: { classGroups: { 'font-size': [{ text: ['stat', 'stat-lg'] }] } },
+});
 
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));

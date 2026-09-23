@@ -1,8 +1,13 @@
 import * as React from 'react';
 import { ArrowLeft, Search } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useAuth } from '@/lib/auth';
+import { bottomTabsFor, NAV_SECTIONS } from '@/lib/navigation';
+import { cn } from '@/lib/utils';
+
+const MENU_PAGES = new Set(NAV_SECTIONS.flatMap((section) => section.items.map((item) => item.to)));
 
 /**
  * Goes back the way the user came.
@@ -16,12 +21,19 @@ import { Input } from '@/components/ui/input';
  */
 export function BackButton({ label = 'Back' }: { label?: string }) {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const user = useAuth((s) => s.user);
+
+  // A menu page is a starting point: the sidebar is always there on a desktop,
+  // and the bottom bar is on a phone. Pages reached through More still need it.
+  if (bottomTabsFor(user).includes(pathname)) return null;
+  const hideOnDesktop = MENU_PAGES.has(pathname);
 
   return (
     <Button
       variant="ghost"
       size="sm"
-      className="-ms-2 gap-1 self-start"
+      className={cn('-ms-2 gap-1 self-start', hideOnDesktop && 'lg:hidden')}
       onClick={() => {
         const index = (window.history.state as { idx?: number } | null)?.idx ?? 0;
         if (index > 0) navigate(-1);

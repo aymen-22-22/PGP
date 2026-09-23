@@ -1,5 +1,6 @@
 import { AlertTriangle, Inbox, Loader2, Lock, SearchX, WifiOff } from 'lucide-react';
 import * as React from 'react';
+import { Link } from 'react-router-dom';
 import { useT } from '@/i18n/provider';
 import { ApiRequestError } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -65,14 +66,20 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
   // A missing record and a rejected input are not system failures, and offering
   // "try again" for either just invites the user to repeat a request that
   // cannot succeed.
-  if (apiError?.status === 404) {
+  // A malformed id in the address is a wrong link, not a bad form entry — the
+  // raw "uuid is expected" message means nothing to the person who clicked it.
+  const badLink = apiError?.status === 400 && /uuid is expected/i.test(apiError.message);
+  if (apiError?.status === 404 || badLink) {
     return (
       <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-12 text-center">
         <SearchX className="h-10 w-10 text-muted-foreground" aria-hidden />
         <p className="font-semibold">{t('state.error.notFound')}</p>
         <p className="max-w-sm text-sm text-muted-foreground">
-          {apiError.message || 'This record no longer exists, or the link is wrong.'}
+          {badLink || !apiError.message ? t('notFound.body') : apiError.message}
         </p>
+        <Button asChild variant="outline">
+          <Link to="/">{t('notFound.back')}</Link>
+        </Button>
       </div>
     );
   }
