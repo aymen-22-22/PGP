@@ -134,14 +134,14 @@ export default function HomePage() {
       {admin && data.byWarehouse.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">By warehouse</h2>
-          <TableWrap>
+          <TableWrap stack={false}>
             <thead>
               <tr>
                 <Th>Warehouse</Th>
                 <Th className="text-end">Available</Th>
-                <Th className="text-end">In transfer</Th>
-                <Th className="text-end">Sold</Th>
-                <Th className="text-end">Total</Th>
+                <Th className="hidden text-end sm:table-cell">In transfer</Th>
+                <Th className="hidden text-end sm:table-cell">Sold</Th>
+                <Th className="hidden text-end sm:table-cell">Total</Th>
               </tr>
             </thead>
             <tbody>
@@ -163,9 +163,9 @@ export default function HomePage() {
                         {countryName(group.code, locale)}
                       </Td>
                       <Td className="tabular text-end font-semibold">{formatNumber(sum('available'))}</Td>
-                      <Td className="tabular text-end font-semibold">{formatNumber(sum('inTransfer'))}</Td>
-                      <Td className="tabular text-end font-semibold">{formatNumber(sum('sold'))}</Td>
-                      <Td className="tabular text-end font-semibold">{formatNumber(sum('total'))}</Td>
+                      <Td className="hidden sm:table-cell tabular text-end font-semibold">{formatNumber(sum('inTransfer'))}</Td>
+                      <Td className="hidden sm:table-cell tabular text-end font-semibold">{formatNumber(sum('sold'))}</Td>
+                      <Td className="hidden sm:table-cell tabular text-end font-semibold">{formatNumber(sum('total'))}</Td>
                     </tr>
                     {group.items.map((row) => (
                       <Tr key={row.warehouseId}>
@@ -174,9 +174,9 @@ export default function HomePage() {
                           <span className="tabular ms-2 text-xs text-muted-foreground">{row.warehouseCode}</span>
                         </Td>
                         <Td className="tabular text-end">{formatNumber(row.available)}</Td>
-                        <Td className="tabular text-end">{formatNumber(row.inTransfer)}</Td>
-                        <Td className="tabular text-end">{formatNumber(row.sold)}</Td>
-                        <Td className="tabular text-end text-muted-foreground">{formatNumber(row.total)}</Td>
+                        <Td className="hidden sm:table-cell tabular text-end">{formatNumber(row.inTransfer)}</Td>
+                        <Td className="hidden sm:table-cell tabular text-end">{formatNumber(row.sold)}</Td>
+                        <Td className="hidden sm:table-cell tabular text-end text-muted-foreground">{formatNumber(row.total)}</Td>
                       </Tr>
                     ))}
                   </Fragment>

@@ -35,10 +35,16 @@ export function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-muted/40 px-4 py-10">
-      <Card className="w-full max-w-sm">
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-sidebar px-4 py-10">
+      <div className="flex items-center gap-3 text-sidebar-foreground">
+        <span className="flex h-10 w-10 items-center justify-center rounded bg-sidebar-accent font-bold" aria-hidden>
+          PE
+        </span>
+        <span className="text-xl font-semibold tracking-tight">Phone ERP</span>
+      </div>
+      <Card className="w-full max-w-sm shadow-lg">
         <CardHeader className="space-y-1 pb-4">
-          <CardTitle className="text-2xl">Phone ERP</CardTitle>
+          <CardTitle className="text-xl">{t('login.submit')}</CardTitle>
           <CardDescription>{t('login.lead')}</CardDescription>
         </CardHeader>
 
