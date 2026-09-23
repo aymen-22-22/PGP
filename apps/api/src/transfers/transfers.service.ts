@@ -104,8 +104,8 @@ export class TransfersService {
           number: true,
           status: true,
           createdAt: true,
-          sourceWarehouse: { select: { id: true, name: true } },
-          destinationWarehouse: { select: { id: true, name: true } },
+          sourceWarehouse: { select: { id: true, name: true, code: true } },
+          destinationWarehouse: { select: { id: true, name: true, code: true } },
           shipment: { select: { number: true, status: true, shippedAt: true } },
           items: { select: { quantity: true } },
           _count: { select: { devices: true } },
@@ -485,8 +485,8 @@ export class TransfersService {
         _count: { select: { devices: true } },
         items: { include: { product: { select: { id: true, name: true, sku: true, tracking: true } } } },
         // Named, not just identified: the despatch note says where it is going.
-        sourceWarehouse: { select: { name: true } },
-        destinationWarehouse: { select: { name: true } },
+        sourceWarehouse: { select: { name: true, code: true } },
+        destinationWarehouse: { select: { name: true, code: true } },
       },
     });
     if (!transfer) throw BusinessError.notFound('Transfer', transferId);
@@ -619,6 +619,18 @@ export class TransfersService {
       referenceId: transferId,
       facts: {
         headline: `On its way to ${transfer.destinationWarehouse.name}`,
+        journey: {
+          area: 'moving',
+          from: transfer.sourceWarehouse,
+          to: transfer.destinationWarehouse,
+          progress: 0.5,
+          steps: [
+            { label: 'Prepared', state: 'done', note: transfer.number },
+            { label: 'Loaded', state: 'done', note: `${result.shipped} units` },
+            { label: 'On the way', state: 'current', note: dto.carrier ?? null },
+            { label: 'Arrived', state: 'todo' },
+          ],
+        },
         facts: [
           { label: 'Transfer', value: transfer.number },
           { label: 'From', value: transfer.sourceWarehouse.name },
@@ -666,8 +678,8 @@ export class TransfersService {
       include: {
         shipment: true,
         items: { include: { product: { select: { id: true, name: true, sku: true, tracking: true } } } },
-        sourceWarehouse: { select: { name: true } },
-        destinationWarehouse: { select: { name: true } },
+        sourceWarehouse: { select: { name: true, code: true } },
+        destinationWarehouse: { select: { name: true, code: true } },
       },
     });
     if (!transfer) throw BusinessError.notFound('Transfer', transferId);
@@ -853,6 +865,22 @@ export class TransfersService {
         headline: result.complete
           ? `Arrived at ${transfer.destinationWarehouse.name}`
           : `Part-arrived at ${transfer.destinationWarehouse.name}`,
+        journey: {
+          area: 'moving',
+          from: transfer.sourceWarehouse,
+          to: transfer.destinationWarehouse,
+          progress: result.complete ? 1 : expected ? result.received / expected : 0.5,
+          steps: [
+            { label: 'Prepared', state: 'done', note: transfer.number },
+            { label: 'Loaded', state: 'done' },
+            { label: 'On the way', state: 'done' },
+            {
+              label: 'Arrived',
+              state: result.complete ? 'done' : 'current',
+              note: `${result.received} of ${expected}`,
+            },
+          ],
+        },
         facts: [
           { label: 'Transfer', value: transfer.number },
           { label: 'From', value: transfer.sourceWarehouse.name },

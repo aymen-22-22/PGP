@@ -55,6 +55,17 @@ const MOVEMENT_ICON: Record<string, typeof Truck> = {
   ADJUSTMENT: Building2,
 };
 
+/** Same colours as the areas of the app: arriving blue, moving orange, selling green. */
+const MOVEMENT_COLOUR: Record<string, string> = {
+  PURCHASE_RECEIPT: 'bg-blue-600',
+  TRANSFER_OUT: 'bg-orange-500',
+  TRANSFER_IN: 'bg-orange-500',
+  SALE: 'bg-emerald-600',
+  RETURN: 'bg-amber-500',
+  ADJUSTMENT: 'bg-slate-500',
+  IDENTIFIED: 'bg-indigo-500',
+};
+
 /** The traceability screen: the complete life of one phone (spec §21). */
 export default function ImeiDetailPage() {
   const { t, dateTime, money } = useI18n();
@@ -114,7 +125,7 @@ export default function ImeiDetailPage() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">{t('imei.history')}</CardTitle>
+          <CardTitle className="text-base">{t('journey.history')}</CardTitle>
         </CardHeader>
         <CardContent>
           <ol className="relative space-y-0 border-s-2 border-border ps-6">
@@ -122,10 +133,16 @@ export default function ImeiDetailPage() {
               const Icon = MOVEMENT_ICON[movement.type] ?? Building2;
               return (
                 <li key={movement.id} className="relative pb-6 last:pb-0">
-                  <span className="absolute -start-[2.15rem] flex h-7 w-7 items-center justify-center rounded-full border-2 border-border bg-card">
-                    <Icon className="h-3.5 w-3.5" aria-hidden />
+                  <span
+                    className={`absolute -start-[2.3rem] flex h-8 w-8 items-center justify-center rounded-full text-white shadow-sm ${MOVEMENT_COLOUR[movement.type] ?? 'bg-slate-500'}`}
+                  >
+                    <Icon className="h-4 w-4" aria-hidden />
                   </span>
-                  <p className="font-semibold leading-tight">{t(`movement.type.${movement.type}`)}</p>
+                  <p className="font-semibold leading-tight">
+                    {t(`journey.move.${movement.type}`, {
+                      to: movement.toWarehouse?.name ?? movement.fromWarehouse?.name ?? '',
+                    })}
+                  </p>
                   <p className="text-sm text-muted-foreground">
                     {movement.fromWarehouse?.name && movement.toWarehouse?.name
                       ? `${movement.fromWarehouse.name} → ${movement.toWarehouse.name}`

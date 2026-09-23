@@ -44,6 +44,15 @@ export interface Dashboard {
     sold: number;
     total: number;
   }[];
+  /** Plain-language summary for the top of the dashboard. */
+  today: {
+    sales: number;
+    revenue: string;
+    yesterdaySales: number;
+    yesterdayRevenue: string;
+    /** In transit for more than three days. */
+    lateTransfers: number;
+  };
 }
 
 /** What a ledger was asked for, echoed back so its header can say so. */

@@ -106,7 +106,7 @@ export class ReceivingService {
         warehouseId: true,
         scannedCount: true,
         expectedCount: true,
-        warehouse: { select: { name: true } },
+        warehouse: { select: { name: true, code: true } },
         createdBy: { select: { name: true } },
       },
     });
@@ -161,7 +161,15 @@ export class ReceivingService {
       referenceType: 'Receipt',
       referenceId: id,
       facts: {
-        headline: 'Released into sellable stock',
+        headline: `${released} phone${released === 1 ? '' : 's'} ready to sell in ${receipt.warehouse.name}`,
+        journey: {
+          area: 'buying',
+          steps: [
+            { label: 'Arrived', state: 'done', note: receipt.createdBy?.name ?? null },
+            { label: 'Checked', state: 'done', note: user.name },
+            { label: 'In stock', state: 'done', note: receipt.warehouse.name },
+          ],
+        },
         facts: [
           { label: 'Receipt', value: receipt.number },
           { label: 'Warehouse', value: receipt.warehouse.name },

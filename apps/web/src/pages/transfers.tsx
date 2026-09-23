@@ -13,6 +13,7 @@ import type { TransferListItem } from '@phone-erp/shared-types';
 import { useApiList, useApiMutation, useApiQuery } from '@/hooks/use-api';
 import { useDebounce } from '@/hooks/use-debounce';
 import { useI18n } from '@/i18n/provider';
+import { countryFromWarehouseCode, flagOf } from '@/lib/countries';
 import { useStatusLabel } from '@/lib/status';
 import { api } from '@/lib/api';
 import { isAdmin, useAuth } from '@/lib/auth';
@@ -114,11 +115,19 @@ export default function TransfersPage() {
                   className="flex items-center gap-3 px-3 py-3 transition-colors hover:bg-accent/40"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="tabular font-semibold">{transfer.number}</p>
-                    <p className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
+                    <p className="font-semibold">
+                      {t(`journey.transfer.${transfer.status}`, {
+                        from: transfer.sourceWarehouse.name,
+                        to: transfer.destinationWarehouse.name,
+                      })}
+                    </p>
+                    <p className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+                      <span aria-hidden>{flagOf(countryFromWarehouseCode(transfer.sourceWarehouse.code))}</span>
                       {transfer.sourceWarehouse.name}
-                      <ArrowRight className="h-3 w-3" aria-hidden />
+                      <ArrowRight className="h-3 w-3 rtl:rotate-180" aria-hidden />
+                      <span aria-hidden>{flagOf(countryFromWarehouseCode(transfer.destinationWarehouse.code))}</span>
                       {transfer.destinationWarehouse.name}
+                      <span className="tabular text-xs">· {transfer.number}</span>
                     </p>
                     <p className="tabular text-xs text-muted-foreground">
                       {/* Before dispatch there is nothing to receive, so the plan

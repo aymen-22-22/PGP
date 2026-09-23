@@ -14,6 +14,9 @@ import { buildLedgerScope } from './ledger-scope';
  * shipped — frozen on the sale at completion — and profit is the difference.
  * No accruals, no landed cost, no accounting engine.
  */
+/** A transfer still on the road after this many days is flagged as late. */
+const LATE_AFTER_DAYS = 3;
+
 @Injectable()
 export class ReportsService {
   constructor(
@@ -124,6 +127,8 @@ export class ReportsService {
       .reduce((sum, l) => sum.plus(l.quantity), new Prisma.Decimal(0))
       .toNumber();
 
+    const today = await this.todayAtAGlance(saleScope, scopeId);
+
     const revenue = salesAgg._sum.totalAmountBase?.toFixed(2) ?? '0.00';
     const purchaseCost = salesAgg._sum.totalCost?.toFixed(2) ?? '0.00';
     const profit = subtract(revenue, purchaseCost);
@@ -171,6 +176,49 @@ export class ReportsService {
         pendingReceipts: openPurchases + openTransfers,
       },
       byWarehouse,
+      today,
+    };
+  }
+
+  /**
+   * The few numbers the dashboard says in words: today against yesterday, and
+   * transfers that have been on the road too long.
+   */
+  private async todayAtAGlance(saleScope: Prisma.SaleWhereInput, scopeId?: string): Promise<Dashboard['today']> {
+    const startToday = new Date();
+    startToday.setUTCHours(0, 0, 0, 0);
+    const startYesterday = new Date(startToday.getTime() - 86_400_000);
+    const lateBefore = new Date(Date.now() - LATE_AFTER_DAYS * 86_400_000);
+
+    const sales = (from: Date, to?: Date) =>
+      this.prisma.sale.aggregate({
+        where: {
+          AND: [saleScope, { completedAt: { gte: from, ...(to ? { lt: to } : {}) } }],
+        },
+        _sum: { totalAmountBase: true },
+        _count: { _all: true },
+      });
+
+    const [now, before, late] = await Promise.all([
+      sales(startToday),
+      sales(startYesterday, startToday),
+      this.prisma.transfer.count({
+        where: {
+          status: TransferStatus.IN_TRANSIT,
+          shipment: { shippedAt: { lt: lateBefore } },
+          ...(scopeId
+            ? { OR: [{ sourceWarehouseId: scopeId }, { destinationWarehouseId: scopeId }] }
+            : {}),
+        },
+      }),
+    ]);
+
+    return {
+      sales: now._count._all,
+      revenue: now._sum.totalAmountBase?.toFixed(2) ?? '0.00',
+      yesterdaySales: before._count._all,
+      yesterdayRevenue: before._sum.totalAmountBase?.toFixed(2) ?? '0.00',
+      lateTransfers: late,
     };
   }
 

@@ -1,5 +1,9 @@
 import {
+  AlertTriangle,
   ArrowDownToLine,
+  BellRing,
+  Check,
+  ClipboardCheck,
   ArrowRight,
   Inbox,
   Package,
@@ -13,7 +17,6 @@ import {
 import { Fragment, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Stat, StatGrid } from '@/components/ui/stat';
 import { ErrorState, LoadingState } from '@/components/ui/states';
 import { TableWrap, Td, Th, Tr } from '@/components/ui/table';
@@ -45,11 +48,15 @@ export default function HomePage() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{date(new Date())}</p>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            {date(new Date())} · {admin ? t('home.title') : (user?.warehouseName ?? t('home.myWarehouse'))}
+          </p>
           <h1 className="text-2xl font-bold tracking-tight">
-            {admin ? t('home.title') : (user?.warehouseName ?? t('home.myWarehouse'))}
+            {t(greetingKey(), { name: (user?.name ?? '').split(' ')[0] ?? '' })}
           </h1>
-          <p className="text-sm text-muted-foreground">{admin ? t('home.leadAdmin') : t('home.leadUser')}</p>
+          <p className="text-sm text-muted-foreground">
+            {t('talk.today', { count: data.today.sales })} {trend(data.today.sales, data.today.yesterdaySales, t)}
+          </p>
         </div>
         <Button asChild size="lg" className="gap-2 lg:hidden">
           <Link to="/scan">
@@ -58,6 +65,8 @@ export default function HomePage() {
           </Link>
         </Button>
       </header>
+
+      <Attention data={data} admin={admin} />
 
       {empty && admin && <GetStarted />}
 
@@ -97,20 +106,6 @@ export default function HomePage() {
           to="/receive"
         />
       </StatGrid>
-
-      {totals.pendingValidation > 0 && (
-        <Card className="border-warning/40 bg-warning/5">
-          <CardContent className="flex items-center justify-between gap-3 p-4">
-            <div>
-              <p className="font-semibold">{formatNumber(totals.pendingValidation)} phones await validation</p>
-              <p className="text-sm text-muted-foreground">They are not sellable until a receipt is validated.</p>
-            </div>
-            <Button asChild variant="outline">
-              <Link to="/receipts">Review</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      )}
 
       {admin && (
         <div className="grid gap-4 lg:grid-cols-5">
@@ -214,6 +209,93 @@ export default function HomePage() {
         </section>
       )}
     </div>
+  );
+}
+
+function greetingKey(): string {
+  const hour = new Date().getHours();
+  return hour < 12 ? 'talk.greeting.morning' : hour < 18 ? 'talk.greeting.afternoon' : 'talk.greeting.evening';
+}
+
+function trend(now: number, before: number, t: (key: string, vars?: Record<string, string | number>) => string): string {
+  if (now === before) return t('talk.sameAsYesterday');
+  return now > before
+    ? t('talk.moreThanYesterday', { count: now - before })
+    : t('talk.lessThanYesterday', { count: before - now });
+}
+
+/**
+ * What needs doing, said in a sentence with the button that does it. When
+ * nothing is waiting it says so — an empty list reads as a broken page.
+ */
+function Attention({ data, admin }: { data: Dashboard; admin: boolean }) {
+  const { t } = useI18n();
+  const items = [
+    data.movement.pendingReceipts > 0 && {
+      key: 'receive',
+      icon: Inbox,
+      tone: 'bg-blue-50 text-blue-700',
+      text: t('talk.toReceive', { count: data.movement.pendingReceipts }),
+      action: t('talk.receiveNow'),
+      to: '/receive',
+    },
+    data.totals.pendingValidation > 0 && {
+      key: 'validate',
+      icon: ClipboardCheck,
+      tone: 'bg-amber-50 text-amber-700',
+      text: t('talk.toValidate', { count: data.totals.pendingValidation }),
+      action: t('talk.check'),
+      to: '/receipts',
+    },
+    data.today.lateTransfers > 0 && {
+      key: 'late',
+      icon: AlertTriangle,
+      tone: 'bg-red-50 text-red-700',
+      text: t('talk.late', { count: data.today.lateTransfers }),
+      action: t('talk.view'),
+      to: '/transfers?status=IN_TRANSIT',
+    },
+    data.movement.outgoing > 0 && {
+      key: 'outgoing',
+      icon: Truck,
+      tone: 'bg-orange-50 text-orange-700',
+      text: t('talk.outgoing', { count: data.movement.outgoing }),
+      action: t('talk.view'),
+      to: '/transfers?status=IN_TRANSIT',
+    },
+  ].filter(Boolean) as { key: string; icon: typeof Inbox; tone: string; text: string; action: string; to: string }[];
+
+  if (items.length === 0) {
+    return (
+      <div className="flex items-center gap-3 rounded-xl border border-success/30 bg-success/5 p-4">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-success text-white">
+          <Check className="h-5 w-5" strokeWidth={3} />
+        </span>
+        <p className="text-sm font-medium">{admin ? t('talk.allClearAdmin') : t('talk.allClear')}</p>
+      </div>
+    );
+  }
+
+  return (
+    <section className="rounded-xl border bg-card p-4 shadow-[0_1px_2px_rgba(16,24,40,0.05)] sm:p-5">
+      <h2 className="mb-3 flex items-center gap-2 font-semibold">
+        <BellRing className="h-4 w-4 text-primary" aria-hidden />
+        {t('talk.attention')}
+      </h2>
+      <ul className="space-y-2">
+        {items.map((item) => (
+          <li key={item.key} className="flex items-center gap-3 rounded-lg border p-3">
+            <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', item.tone)}>
+              <item.icon className="h-[1.1rem] w-[1.1rem]" aria-hidden />
+            </span>
+            <p className="flex-1 text-sm font-medium">{item.text}</p>
+            <Button asChild size="sm" variant="outline" className="shrink-0">
+              <Link to={item.to}>{item.action}</Link>
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
