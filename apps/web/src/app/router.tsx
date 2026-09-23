@@ -39,6 +39,7 @@ const DeliveryCarrierPage = lazy(() => import('@/pages/delivery-carrier'));
 const UsersPage = lazy(() => import('@/pages/users'));
 const AuditLogsPage = lazy(() => import('@/pages/audit-logs'));
 const SystemLogsPage = lazy(() => import('@/pages/system-logs'));
+const MailSettingsPage = lazy(() => import('@/pages/mail-settings'));
 const NotificationsPage = lazy(() => import('@/pages/notifications'));
 const PosPage = lazy(() => import('@/pages/pos'));
 const CostsPage = lazy(() => import('@/pages/costs'));
@@ -193,6 +194,14 @@ export function AppRouter() {
             element={
               <RequireAdmin>
                 <NotificationsPage />
+              </RequireAdmin>
+            }
+          />
+          <Route
+            path="settings/email"
+            element={
+              <RequireAdmin>
+                <MailSettingsPage />
               </RequireAdmin>
             }
           />

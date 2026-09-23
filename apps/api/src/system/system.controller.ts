@@ -1,43 +1,55 @@
-import { BadRequestException, Controller, Get, Header, NotFoundException, Query, StreamableFile } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Header, NotFoundException, Post, Put, Query, StreamableFile } from '@nestjs/common';
+import { ArrayMaxSize, IsArray, IsBoolean, IsEmail, IsOptional } from 'class-validator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { RequestUser } from '../common/types';
+import { AlertsService } from './alerts.service';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { closeSync, createReadStream, existsSync, openSync, readSync, statSync } from 'node:fs';
+import { createReadStream, existsSync } from 'node:fs';
 import { AdminOnly } from '../common/decorators/roles.decorator';
-import { dayOf, fileFor, isLogDay, listLogFiles, type LogEntry, type LogLevel } from '../logging/file-log';
+import { dayOf, fileFor, isLogDay, listLogFiles, readEntries, type LogLevel } from '../logging/file-log';
 
-/** Reading more than this from one day's file would stall the request; the newest part is what matters. */
-const READ_TAIL_BYTES = 4 * 1_048_576;
 const RANK: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3, fatal: 4 };
 
-function readEntries(day: string): LogEntry[] {
-  const file = fileFor(day);
-  if (!existsSync(file)) return [];
-  const size = statSync(file).size;
-  const start = Math.max(0, size - READ_TAIL_BYTES);
-  const buffer = Buffer.alloc(size - start);
-  const fd = openSync(file, 'r');
-  try {
-    readSync(fd, buffer, 0, buffer.length, start);
-  } finally {
-    closeSync(fd);
-  }
-  const lines = buffer.toString('utf8').split('\n');
-  if (start > 0) lines.shift(); // first line was cut in half
-  const entries: LogEntry[] = [];
-  for (const line of lines) {
-    if (!line) continue;
-    try {
-      entries.push(JSON.parse(line) as LogEntry);
-    } catch {
-      entries.push({ t: '', level: 'info', ctx: 'raw', msg: line, pid: 0 });
-    }
-  }
-  return entries;
+class AlertsDto {
+  @IsBoolean() enabled!: boolean;
+  @IsArray() @ArrayMaxSize(10) @IsEmail({}, { each: true }) recipients!: string[];
+}
+
+class AlertTestDto {
+  @IsOptional() @IsArray() @ArrayMaxSize(10) @IsEmail({}, { each: true }) recipients?: string[];
 }
 
 @ApiTags('System')
 @Controller('system')
 @AdminOnly()
 export class SystemController {
+  constructor(private readonly alerts: AlertsService) {}
+
+  @Get('alerts')
+  @ApiOperation({ summary: 'Who is emailed when the server logs an error or crashes' })
+  async readAlerts() {
+    const { enabled, recipients, lastSentAt } = await this.alerts.read();
+    return { enabled, recipients, lastSentAt };
+  }
+
+  @Put('alerts')
+  @ApiOperation({ summary: 'Set who is emailed about errors and crashes' })
+  async saveAlerts(@Body() dto: AlertsDto, @CurrentUser() user: RequestUser) {
+    const { enabled, recipients, lastSentAt } = await this.alerts.save(dto, user.id);
+    return { enabled, recipients, lastSentAt };
+  }
+
+  @Post('alerts/test')
+  @ApiOperation({ summary: 'Send a test alert now' })
+  async testAlert(@Body() dto: AlertTestDto) {
+    try {
+      await this.alerts.sendTest(dto.recipients ?? []);
+      return { ok: true };
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   @Get('health')
   @ApiOperation({ summary: 'How the running process is doing, and what today looked like' })
   health() {

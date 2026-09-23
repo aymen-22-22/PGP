@@ -53,7 +53,8 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
-    if (!this.config.mail.enabled) return;
+    // Always armed: mail can be switched on from Settings without a restart,
+    // and a sweep with nothing pending costs one query.
     // A plain interval rather than a scheduler dependency: one queue, one
     // worker, and shared hosting has nowhere to put a job runner anyway.
     this.sweep = setInterval(() => void this.flush(), this.config.mail.sweepMs);
@@ -72,7 +73,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
    * not un-received because the mail server was unreachable.
    */
   async notify(input: NotifyInput): Promise<void> {
-    if (!this.config.mail.enabled) return;
+    if (!(await this.mailer.isEnabled())) return;
 
     try {
       const recipients = await this.recipientsFor(input);
@@ -110,7 +111,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
    * the answer a caller is most likely to act on.
    */
   async flush(): Promise<{ sent: number; failed: number }> {
-    if (!this.config.mail.enabled) return { sent: 0, failed: 0 };
+    if (!(await this.mailer.isEnabled())) return { sent: 0, failed: 0 };
     if (this.inFlight) return this.inFlight;
 
     this.inFlight = this.runSweep().finally(() => {

@@ -34,6 +34,7 @@ import { ReportsModule } from './reports/reports.module';
 import { ReturnsModule } from './returns/returns.module';
 import { SalesModule } from './sales/sales.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
+import { SettingsModule } from './settings/settings.module';
 import { SystemModule } from './system/system.module';
 import { TransfersModule } from './transfers/transfers.module';
 import { UsersModule } from './users/users.module';
@@ -75,6 +76,7 @@ function noStore(_request: Request, response: Response, next: NextFunction): voi
       },
     }),
     PrismaModule,
+    SettingsModule,
     RealtimeModule,
     CommonModule,
     AuditModule,

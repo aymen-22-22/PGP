@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, readSync, statSync, unlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 /**
@@ -98,4 +98,34 @@ export const isLogDay = (value: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(v
 export function describeError(error: unknown): { msg: string; stack?: string } {
   if (error instanceof Error) return { msg: `${error.name}: ${error.message}`, stack: error.stack };
   return { msg: String(error) };
+}
+
+/** Reading more than this from one day's file would stall a request; the newest part is what matters. */
+const READ_TAIL_BYTES = 4 * 1_048_576;
+
+/** One day's entries, oldest first, from the last few megabytes of its file. */
+export function readEntries(day: string): LogEntry[] {
+  const file = fileFor(day);
+  if (!existsSync(file)) return [];
+  const size = statSync(file).size;
+  const start = Math.max(0, size - READ_TAIL_BYTES);
+  const buffer = Buffer.alloc(size - start);
+  const fd = openSync(file, 'r');
+  try {
+    readSync(fd, buffer, 0, buffer.length, start);
+  } finally {
+    closeSync(fd);
+  }
+  const lines = buffer.toString('utf8').split('\n');
+  if (start > 0) lines.shift(); // the first line was cut in half
+  const entries: LogEntry[] = [];
+  for (const line of lines) {
+    if (!line) continue;
+    try {
+      entries.push(JSON.parse(line) as LogEntry);
+    } catch {
+      entries.push({ t: '', level: 'info', ctx: 'raw', msg: line, pid: 0 });
+    }
+  }
+  return entries;
 }
