@@ -183,6 +183,18 @@ describe('Authentication (spec §23)', () => {
     const other = await as(app, carlos).get('/api/v1/auth/me').expect(200);
     expect(other.body.printerConnectionType).toBe('BROWSER');
   });
+
+  it('keeps the chosen language on the account', async () => {
+    const jean = await login(app, fixture.jean.email);
+    expect((await as(app, jean).get('/api/v1/auth/me').expect(200)).body.language).toBeNull();
+
+    await as(app, jean).patch('/api/v1/auth/preferences').send({ language: 'ar' }).expect(200);
+    await as(app, jean).patch('/api/v1/auth/preferences').send({ language: 'de' }).expect(400);
+
+    // A fresh sign-in (another device) comes back in Arabic.
+    const again = await login(app, fixture.jean.email);
+    expect((await as(app, again).get('/api/v1/auth/me').expect(200)).body.language).toBe('ar');
+  });
 });
 
 describe('Login rate limiting (spec §23, §41)', () => {

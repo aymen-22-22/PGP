@@ -267,6 +267,8 @@ model User {
   printerAddress        String?
   /// The last label size they printed, e.g. "58x40" — reused as the default.
   printerLabelSize      String                @default("58x40")
+  /// The language this person chose ("en", "fr", "ar"); null = the browser decides.
+  language              String?
   lastLoginAt           DateTime?
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt

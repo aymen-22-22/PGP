@@ -363,6 +363,22 @@ function PrinterSettings() {
  */
 function LanguageChoice() {
   const { locale, setLocale, t } = useI18n();
+  const user = useAuth((s) => s.user);
+  const setUser = useAuth((s) => s.setUser);
+  const toast = useToast();
+
+  const choose = (code: Locale) => {
+    setLocale(code);
+    if (!user || user.language === code) return;
+    // Saved on the account: the next sign-in, on any device, opens in it.
+    void api
+      .patch('/auth/preferences', { language: code })
+      .then(() => {
+        setUser({ ...user, language: code });
+        toast.push('success', t('more.languageSaved'));
+      })
+      .catch(() => undefined);
+  };
 
   return (
     <div className="space-y-2">
@@ -377,7 +393,7 @@ function LanguageChoice() {
             lang={code}
             dir={LOCALES[code].dir}
             aria-pressed={locale === code}
-            onClick={() => setLocale(code)}
+            onClick={() => choose(code)}
             className={`h-10 rounded-md px-2 text-sm font-semibold transition-colors ${
               locale === code
                 ? 'bg-card text-foreground shadow-sm'

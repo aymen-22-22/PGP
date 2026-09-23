@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { useAuth } from '@/lib/auth';
 import {
   DEFAULT_LOCALE,
   LOCALES,
@@ -94,6 +95,13 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       /* the choice still applies for this session */
     }
   }, []);
+
+  // The language saved on the account wins when someone signs in, so it
+  // follows them to a new phone or a shared warehouse PC.
+  const accountLanguage = useAuth((s) => s.user?.language ?? null);
+  React.useEffect(() => {
+    if (isLocale(accountLanguage)) setLocale(accountLanguage);
+  }, [accountLanguage, setLocale]);
 
   const value = React.useMemo<I18nValue>(
     () => ({

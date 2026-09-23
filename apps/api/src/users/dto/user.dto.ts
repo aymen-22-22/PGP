@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { PrinterConnectionType, Role } from '@prisma/client';
 import { Transform } from 'class-transformer';
 import {
+  IsIn,
   IsBoolean,
   IsEmail,
   IsEnum,
@@ -62,6 +63,11 @@ export class UpdatePreferencesDto {
   @IsString()
   @MaxLength(20)
   printerLabelSize?: string;
+
+  @ApiPropertyOptional({ enum: ['en', 'fr', 'ar'], description: 'The app language, kept on the account.' })
+  @IsOptional()
+  @IsIn(['en', 'fr', 'ar'])
+  language?: string;
 }
 
 export class QueryUsersDto extends PaginationQueryDto {

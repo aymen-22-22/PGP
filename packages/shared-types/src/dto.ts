@@ -21,4 +21,6 @@ export interface AuthUser {
   printerAddress: string | null;
   /** The label size to default to, e.g. "58x40". */
   printerLabelSize: string;
+  /** The language this person chose; null = the browser decides. */
+  language: string | null;
 }
