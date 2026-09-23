@@ -147,6 +147,8 @@ export interface Product360 {
     at: string;
     quantity: number;
     imei: string | null;
+    /** The phones in this step: IMEI, else label code, else serial. */
+    codes: string[];
     from: string | null;
     to: string | null;
     reference: string | null;
