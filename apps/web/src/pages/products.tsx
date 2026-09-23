@@ -1,4 +1,4 @@
-import { Image as ImageIcon, Package, Pencil, Plus } from 'lucide-react';
+import { Package, Pencil, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ImagePicker } from '@/components/image-picker';
@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils';
 
 
 export default function ProductsPage() {
-  const { t, money } = useI18n();
+  const { t, money, n } = useI18n();
   // Arriving from another form: `new=1` opens the form straight away, and
   // `return` is where to go once the product exists.
   const [params, setParams] = useSearchParams();
@@ -96,6 +96,7 @@ export default function ProductsPage() {
                 <Th>{t('products.brand')}</Th>
                 <Th>{t('products.sku')}</Th>
                 <Th>{t('products.counted')}</Th>
+                <Th className="text-end">{t('products.inStock')}</Th>
                 <Th className="text-end">{t('products.purchase')}</Th>
                 <Th className="text-end">{t('products.sale')}</Th>
                 <Th />
@@ -106,13 +107,11 @@ export default function ProductsPage() {
                 <Tr key={product.id}>
                   <Td>
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted">
-                        {product.imageUrl ? (
+                      {product.imageUrl && (
+                        <div className="h-9 w-9 shrink-0 overflow-hidden rounded border bg-muted">
                           <img src={product.imageUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
-                        ) : (
-                          <ImageIcon className="h-4 w-4 text-muted-foreground" aria-hidden />
-                        )}
-                      </div>
+                        </div>
+                      )}
                       <span className="max-w-[16rem] truncate font-medium">{product.name}</span>
                     </div>
                   </Td>
@@ -122,6 +121,11 @@ export default function ProductsPage() {
                     <Badge variant={product.tracking === 'BULK' ? 'secondary' : 'outline'}>
                       {product.tracking === 'BULK' ? t('products.quantity') : t('products.imei')}
                     </Badge>
+                  </Td>
+                  <Td
+                    className={`tabular text-end font-semibold ${product.inStock ? '' : 'text-muted-foreground'}`}
+                  >
+                    {n(product.inStock ?? 0)}
                   </Td>
                   <Td className="tabular text-end">{money(product.purchasePrice, product.currency)}</Td>
                   <Td className="tabular text-end font-semibold">

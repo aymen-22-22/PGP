@@ -13,7 +13,7 @@ export function TableWrap({ children, className }: { children: React.ReactNode; 
 export const Th = ({ className, ...props }: React.ThHTMLAttributes<HTMLTableCellElement>) => (
   <th
     className={cn(
-      'whitespace-nowrap border-b px-3 py-2.5 text-start text-xs font-semibold uppercase tracking-wide text-muted-foreground',
+      'whitespace-nowrap border-b bg-muted/70 px-3 py-2 text-start text-[0.7rem] font-semibold uppercase tracking-wider text-muted-foreground',
       className,
     )}
     {...props}
@@ -21,9 +21,9 @@ export const Th = ({ className, ...props }: React.ThHTMLAttributes<HTMLTableCell
 );
 
 export const Td = ({ className, ...props }: React.TdHTMLAttributes<HTMLTableCellElement>) => (
-  <td className={cn('whitespace-nowrap border-b px-3 py-3 align-middle', className)} {...props} />
+  <td className={cn('whitespace-nowrap border-b px-3 py-2.5 align-middle', className)} {...props} />
 );
 
 export const Tr = ({ className, ...props }: React.HTMLAttributes<HTMLTableRowElement>) => (
-  <tr className={cn('transition-colors hover:bg-accent/40', className)} {...props} />
+  <tr className={cn('transition-colors hover:bg-accent/50 [&:last-child>td]:border-b-0', className)} {...props} />
 );

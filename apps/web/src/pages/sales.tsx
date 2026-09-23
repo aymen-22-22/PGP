@@ -97,7 +97,7 @@ export default function SalesPage() {
                 >
                   <div className="min-w-0 flex-1">
                     <p className="tabular font-semibold">{sale.number}</p>
-                    <p className="truncate text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                       {sale.customer?.name ?? t('common.walkIn')} · {sale.warehouse.name}
                     </p>
                     <p className="tabular text-xs text-muted-foreground">

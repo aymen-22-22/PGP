@@ -115,7 +115,7 @@ export default function TransfersPage() {
                 >
                   <div className="min-w-0 flex-1">
                     <p className="tabular font-semibold">{transfer.number}</p>
-                    <p className="flex flex-wrap items-center gap-1 truncate text-sm text-muted-foreground">
+                    <p className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
                       {transfer.sourceWarehouse.name}
                       <ArrowRight className="h-3 w-3" aria-hidden />
                       {transfer.destinationWarehouse.name}

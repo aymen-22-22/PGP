@@ -8,10 +8,9 @@ import type { Listed, WarehouseStockCard } from '@phone-erp/shared-types';
 import { useI18n } from '@/i18n/provider';
 import { useApiQuery } from '@/hooks/use-api';
 import { isAdmin, useAuth } from '@/lib/auth';
+import { countryName, flagOf, groupByCountry } from '@/lib/countries';
 
 
-/** A flag for the country, which reads faster than the country's name. */
-const FLAGS: Record<string, string> = { FR: '🇫🇷', ES: '🇪🇸', DZ: '🇩🇿', NL: '🇳🇱', CN: '🇨🇳' };
 
 /**
  * The way into the stock: which building, then what is in it.
@@ -22,7 +21,7 @@ const FLAGS: Record<string, string> = { FR: '🇫🇷', ES: '🇪🇸', DZ: '�
 export default function StockWarehousesPage() {
   // Stock value is office information; the floor sees quantities.
   const showMoney = isAdmin(useAuth((s) => s.user));
-  const { t, money, n } = useI18n();
+  const { t, money, n, locale } = useI18n();
   const query = useApiQuery<Listed<WarehouseStockCard>>('/stock-explorer/warehouses');
 
   if (query.isLoading) return <LoadingState label={t('common.loading')} />;
@@ -32,7 +31,7 @@ export default function StockWarehousesPage() {
   const total = warehouses.reduce((sum, w) => sum + Number(w.stockValue), 0);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <PageHeader
         title={t('stock.title')}
         description={
@@ -57,73 +56,77 @@ export default function StockWarehousesPage() {
         />
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {warehouses.map((warehouse) => (
-          <Link
-            key={warehouse.id}
-            to={`/stock/${warehouse.id}`}
-            className="group flex flex-col overflow-hidden rounded-lg border bg-card shadow-sm transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          >
-            {/* A photo of the actual building when there is one. The flag is
-                the fallback, not the intent: staff recognise their own yard
-                faster than they read a code. */}
-            <div className="relative flex h-32 items-center justify-center bg-muted">
-              {warehouse.imageUrl ? (
-                <img src={warehouse.imageUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
-              ) : (
-                <span className="text-4xl" aria-hidden>
-                  {warehouse.countryCode ? (FLAGS[warehouse.countryCode] ?? '🏭') : '🏭'}
+      {groupByCountry(warehouses, (w) => w.countryCode, (w) => w.name, locale).map((group) => {
+        const groupQty = group.items.reduce((sum, w) => sum + w.quantity, 0);
+        const groupValue = group.items.reduce((sum, w) => sum + Number(w.stockValue ?? 0), 0);
+        return (
+          <section key={group.code ?? 'none'} className="space-y-2">
+            <div className="flex items-baseline justify-between gap-3 border-b pb-1.5">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                <span className="me-2" aria-hidden>
+                  {flagOf(group.code)}
                 </span>
-              )}
-              {warehouse.imageUrl && warehouse.countryCode && (
-                <span
-                  className="absolute end-2 top-2 rounded-md bg-background/85 px-1.5 py-0.5 text-base shadow-sm backdrop-blur"
-                  aria-hidden
-                >
-                  {FLAGS[warehouse.countryCode] ?? '🏭'}
-                </span>
-              )}
-            </div>
-
-            <div className="flex flex-1 flex-col gap-3 p-4 sm:p-5">
-            <div className="min-w-0">
-              <p className="truncate text-base font-bold leading-tight">{warehouse.name}</p>
+                {countryName(group.code, locale)}
+              </h2>
               <p className="tabular text-xs text-muted-foreground">
-                {warehouse.code}
-                {warehouse.location && ` · ${warehouse.location}`}
+                {t('common.quantity')}: {n(groupQty)}
+                {showMoney && ` · ${money(groupValue.toFixed(2), group.items[0]?.currency, { round: true })}`}
               </p>
             </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              {group.items.map((warehouse) => (
+                <Link
+                  key={warehouse.id}
+                  to={`/stock/${warehouse.id}`}
+                  className="group flex flex-col gap-3 rounded-md border bg-card p-4 shadow-sm transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                >
+                  <div className="flex items-center gap-3">
+                    {/* The building's photo when there is one — staff know their own
+                        yard at a glance; otherwise the flag. */}
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted">
+                      {warehouse.imageUrl ? (
+                        <img src={warehouse.imageUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+                      ) : (
+                        <span className="text-xl" aria-hidden>
+                          {flagOf(warehouse.countryCode)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold leading-tight">{warehouse.name}</p>
+                      <p className="tabular truncate text-xs text-muted-foreground">
+                        {warehouse.code}
+                        {warehouse.location && ` · ${warehouse.location}`}
+                      </p>
+                    </div>
+                    {warehouse.quantity === 0 && <Badge variant="secondary">{t('stock.card.empty')}</Badge>}
+                  </div>
 
-            <dl className="grid grid-cols-2 gap-x-3 gap-y-2 border-t pt-3 text-sm">
-              <Figure icon={Package} label={t('common.products')} value={n(warehouse.products)} />
-              <Figure icon={Layers} label={t('stock.card.brands')} value={n(warehouse.categories)} />
-              <Figure icon={Boxes} label={t('common.quantity')} value={n(warehouse.quantity)} />
-              {showMoney && (
-                <div>
-                  <dt className="text-xs uppercase tracking-wide text-muted-foreground">{t('stock.stockValue')}</dt>
-                  <dd className="tabular font-bold text-success">
-                    {money(warehouse.stockValue!, warehouse.currency, { round: true })}
-                  </dd>
-                </div>
-              )}
-            </dl>
+                  <dl className="grid grid-cols-2 gap-x-3 gap-y-2 border-t pt-3 text-sm sm:grid-cols-4">
+                    <Figure icon={Package} label={t('common.products')} value={n(warehouse.products)} />
+                    <Figure icon={Layers} label={t('stock.card.brands')} value={n(warehouse.categories)} />
+                    <Figure icon={Boxes} label={t('common.quantity')} value={n(warehouse.quantity)} />
+                    {showMoney && (
+                      <div className="min-w-0">
+                        <dt className="truncate text-[0.68rem] uppercase tracking-wide text-muted-foreground">
+                          {t('stock.stockValue')}
+                        </dt>
+                        <dd className="tabular truncate font-semibold">
+                          {money(warehouse.stockValue!, warehouse.currency, { round: true })}
+                        </dd>
+                      </div>
+                    )}
+                  </dl>
 
-            <div className="mt-auto flex items-center justify-between border-t pt-3">
-              {warehouse.quantity === 0 ? (
-                <Badge variant="secondary">{t('stock.card.empty')}</Badge>
-              ) : (
-                <span className="text-xs text-muted-foreground">
-                  {t('stock.card.onShelf', { count: warehouse.quantity })}
-                </span>
-              )}
-              <span className="text-sm font-medium text-primary group-hover:underline">
-                {t('stock.card.viewStock')} →
-              </span>
+                  <span className="text-sm font-medium text-primary group-hover:underline">
+                    {t('stock.card.viewStock')} →
+                  </span>
+                </Link>
+              ))}
             </div>
-            </div>
-          </Link>
-        ))}
-      </div>
+          </section>
+        );
+      })}
     </div>
   );
 }
@@ -139,7 +142,7 @@ function Figure({
 }) {
   return (
     <div>
-      <dt className="flex items-center gap-1 text-xs uppercase tracking-wide text-muted-foreground">
+      <dt className="flex items-center gap-1 text-[0.68rem] uppercase tracking-wide text-muted-foreground">
         <Icon className="h-3 w-3" aria-hidden />
         {label}
       </dt>

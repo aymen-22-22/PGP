@@ -1,4 +1,5 @@
 import { ArrowDownToLine, Package, ScanLine, Truck, Wallet } from 'lucide-react';
+import { Fragment } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,6 +10,7 @@ import type { Dashboard } from '@phone-erp/shared-types';
 import { useI18n } from '@/i18n/provider';
 import { useApiQuery } from '@/hooks/use-api';
 import { isAdmin, useAuth } from '@/lib/auth';
+import { countryFromWarehouseCode, countryName, flagOf, groupByCountry } from '@/lib/countries';
 import { formatNumber, plural } from '@/lib/utils';
 
 
@@ -16,7 +18,7 @@ export default function HomePage() {
   const user = useAuth((s) => s.user);
   const admin = isAdmin(user);
 
-  const { t, money } = useI18n();
+  const { t, money, locale } = useI18n();
   const query = useApiQuery<Dashboard>('/reports/dashboard');
   const ledger = (name: string) => `/ledger/${name}`;
 
@@ -143,15 +145,43 @@ export default function HomePage() {
               </tr>
             </thead>
             <tbody>
-              {data.byWarehouse.map((row) => (
-                <Tr key={row.warehouseId}>
-                  <Td className="font-medium">{row.warehouseName}</Td>
-                  <Td className="tabular text-end font-semibold">{formatNumber(row.available)}</Td>
-                  <Td className="tabular text-end">{formatNumber(row.inTransfer)}</Td>
-                  <Td className="tabular text-end">{formatNumber(row.sold)}</Td>
-                  <Td className="tabular text-end text-muted-foreground">{formatNumber(row.total)}</Td>
-                </Tr>
-              ))}
+              {groupByCountry(
+                data.byWarehouse,
+                (row) => countryFromWarehouseCode(row.warehouseCode),
+                (row) => row.warehouseName,
+                locale,
+              ).map((group) => {
+                const sum = (key: 'available' | 'inTransfer' | 'sold' | 'total') =>
+                  group.items.reduce((acc, row) => acc + row[key], 0);
+                return (
+                  <Fragment key={group.code ?? 'none'}>
+                    <tr className="bg-muted/60">
+                      <Td className="font-semibold">
+                        <span className="me-2" aria-hidden>
+                          {flagOf(group.code)}
+                        </span>
+                        {countryName(group.code, locale)}
+                      </Td>
+                      <Td className="tabular text-end font-semibold">{formatNumber(sum('available'))}</Td>
+                      <Td className="tabular text-end font-semibold">{formatNumber(sum('inTransfer'))}</Td>
+                      <Td className="tabular text-end font-semibold">{formatNumber(sum('sold'))}</Td>
+                      <Td className="tabular text-end font-semibold">{formatNumber(sum('total'))}</Td>
+                    </tr>
+                    {group.items.map((row) => (
+                      <Tr key={row.warehouseId}>
+                        <Td className="ps-10">
+                          {row.warehouseName}
+                          <span className="tabular ms-2 text-xs text-muted-foreground">{row.warehouseCode}</span>
+                        </Td>
+                        <Td className="tabular text-end">{formatNumber(row.available)}</Td>
+                        <Td className="tabular text-end">{formatNumber(row.inTransfer)}</Td>
+                        <Td className="tabular text-end">{formatNumber(row.sold)}</Td>
+                        <Td className="tabular text-end text-muted-foreground">{formatNumber(row.total)}</Td>
+                      </Tr>
+                    ))}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </TableWrap>
         </section>

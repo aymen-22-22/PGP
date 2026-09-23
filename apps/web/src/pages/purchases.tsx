@@ -115,7 +115,7 @@ export default function PurchasesPage() {
                 >
                   <div className="min-w-0 flex-1">
                     <p className="tabular font-semibold">{purchase.number}</p>
-                    <p className="truncate text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                       {purchase.supplier.name} → {purchase.warehouse.name}
                     </p>
                     <p className="tabular text-xs text-muted-foreground">
