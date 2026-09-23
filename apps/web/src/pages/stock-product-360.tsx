@@ -350,7 +350,9 @@ export default function StockProduct360Page() {
                       <span className="tabular text-sm text-muted-foreground">
                         {movement.kind === 'QUANTITY'
                           ? `${movement.quantity > 0 ? '+' : ''}${n(movement.quantity)}`
-                          : formatImei(movement.imei ?? '')}
+                          : movement.quantity > 1
+                            ? `×${n(movement.quantity)}`
+                            : formatImei(movement.codes[0] ?? movement.imei ?? '')}
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground">
@@ -368,6 +370,12 @@ export default function StockProduct360Page() {
                         ))}
                     </p>
                     {movement.notes && <p className="text-xs text-muted-foreground">{movement.notes}</p>}
+                    {movement.codes.length > 1 && (
+                      <p className="tabular text-xs text-muted-foreground">
+                        {movement.codes.slice(0, 6).map(formatImei).join(' · ')}
+                        {movement.codes.length > 6 && ` · +${movement.codes.length - 6}`}
+                      </p>
+                    )}
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {dateTime(movement.at)}
                       {movement.by && ` · ${movement.by}`}

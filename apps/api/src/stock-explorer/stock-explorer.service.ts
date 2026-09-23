@@ -356,13 +356,14 @@ export class StockExplorerService {
             referenceType: true,
             referenceId: true,
             referenceNumber: true,
-            device: { select: { imei: true } },
+            device: { select: { imei: true, serialNumber: true, label: { select: { code: true } } } },
             fromWarehouse: { select: { name: true } },
             toWarehouse: { select: { name: true } },
             performedBy: { select: { name: true } },
           },
           orderBy: { createdAt: 'desc' },
-          take: 30,
+          // Grouped into steps below, so read enough rows for ~30 steps.
+          take: 500,
         }),
         this.prisma.stockMovement.findMany({
           where: { productId, warehouseId },
@@ -478,21 +479,7 @@ export class StockExplorerService {
           })
         : [],
       movements: [
-        ...movements.map((m) => ({
-          id: m.id,
-          kind: 'DEVICE' as const,
-          type: m.type,
-          at: m.createdAt.toISOString(),
-          quantity: 1,
-          imei: m.device.imei,
-          from: m.fromWarehouse?.name ?? null,
-          to: m.toWarehouse?.name ?? null,
-          reference: m.referenceNumber,
-          referenceType: m.referenceType,
-          referenceId: m.referenceId,
-          by: m.performedBy?.name ?? null,
-          notes: null as string | null,
-        })),
+        ...groupSteps(movements).slice(0, 30),
         ...bulkLedger.map((m) => ({
           id: m.id,
           kind: 'QUANTITY' as const,
@@ -500,6 +487,7 @@ export class StockExplorerService {
           at: m.createdAt.toISOString(),
           quantity: m.quantity,
           imei: null,
+          codes: [] as string[],
           from: m.quantity < 0 ? warehouse.name : null,
           to: m.quantity > 0 ? warehouse.name : null,
           reference: m.referenceNumber,
@@ -616,4 +604,56 @@ export class StockExplorerService {
     if (!warehouse) throw BusinessError.notFound('Warehouse', warehouseId);
     return warehouse;
   }
+}
+
+type DeviceMovementRow = {
+  id: string;
+  type: string;
+  createdAt: Date;
+  referenceType: string | null;
+  referenceId: string | null;
+  referenceNumber: string | null;
+  device: { imei: string | null; serialNumber: string | null; label: { code: string } | null };
+  fromWarehouse: { name: string } | null;
+  toWarehouse: { name: string } | null;
+  performedBy: { name: string } | null;
+};
+
+/**
+ * One line per step, not per phone: a transfer of two phones is one "Left for
+ * Madrid" with ×2, not the same line twice. Rows arrive newest first.
+ */
+function groupSteps(rows: DeviceMovementRow[]) {
+  const steps = new Map<string, ReturnType<typeof toStep>>();
+  for (const m of rows) {
+    const key = [m.type, m.referenceId ?? m.id, m.fromWarehouse?.name, m.toWarehouse?.name].join('|');
+    const code = m.device.imei ?? m.device.label?.code ?? m.device.serialNumber;
+    const step = steps.get(key);
+    if (step) {
+      step.quantity += 1;
+      if (code) step.codes.push(code);
+    } else {
+      steps.set(key, toStep(m, code));
+    }
+  }
+  return [...steps.values()];
+}
+
+function toStep(m: DeviceMovementRow, code: string | null) {
+  return {
+    id: m.id,
+    kind: 'DEVICE' as const,
+    type: m.type,
+    at: m.createdAt.toISOString(),
+    quantity: 1,
+    imei: m.device.imei,
+    codes: code ? [code] : [],
+    from: m.fromWarehouse?.name ?? null,
+    to: m.toWarehouse?.name ?? null,
+    reference: m.referenceNumber,
+    referenceType: m.referenceType,
+    referenceId: m.referenceId,
+    by: m.performedBy?.name ?? null,
+    notes: null as string | null,
+  };
 }
