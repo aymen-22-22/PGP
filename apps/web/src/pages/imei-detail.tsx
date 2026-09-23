@@ -49,17 +49,17 @@ interface HistoryResponse {
 const MOVEMENT_ICON: Record<string, typeof Truck> = {
   PURCHASE_RECEIPT: PackageCheck,
   TRANSFER_OUT: Truck,
-  TRANSFER_IN: Truck,
+  TRANSFER_IN: PackageCheck,
   SALE: ShoppingCart,
   RETURN: Undo2,
   ADJUSTMENT: Building2,
 };
 
-/** Same colours as the areas of the app: arriving blue, moving orange, selling green. */
+/** Arriving (from a supplier or another warehouse) blue, leaving orange, selling green. */
 const MOVEMENT_COLOUR: Record<string, string> = {
   PURCHASE_RECEIPT: 'bg-blue-600',
   TRANSFER_OUT: 'bg-orange-500',
-  TRANSFER_IN: 'bg-orange-500',
+  TRANSFER_IN: 'bg-blue-600',
   SALE: 'bg-emerald-600',
   RETURN: 'bg-amber-500',
   ADJUSTMENT: 'bg-slate-500',

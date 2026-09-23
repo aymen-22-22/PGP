@@ -38,7 +38,7 @@ const ar: Record<string, string> = {
   'journey.purchase.RECEIVED': 'وصل كل شيء إلى {to}',
   'journey.purchase.CANCELLED': 'تم إلغاء الطلب',
   'journey.history': 'رحلة هذا الهاتف',
-  'journey.move.PURCHASE_RECEIPT': 'وصل من المورّد',
+  'journey.move.PURCHASE_RECEIPT': 'وصل من المورّد إلى {to}',
   'journey.move.TRANSFER_OUT': 'غادر إلى {to}',
   'journey.move.TRANSFER_IN': 'وصل إلى {to}',
   'journey.move.SALE': 'تم البيع',
