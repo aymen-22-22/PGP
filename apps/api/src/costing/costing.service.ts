@@ -51,7 +51,7 @@ export class CostingService {
     }
 
     const document = await this.prisma.$transaction(async (tx) => {
-      const number = await this.numbers.next(tx, 'LC');
+      const number = await this.numbers.next(tx, 'LC', { deviceIds: devices.map((d) => d.id) });
       return tx.costDocument.create({
         data: {
           number,

@@ -234,7 +234,7 @@ export class SalesService {
     const { amountBase: totalAmountBase, exchangeRate } = await this.rates.toBase(totalAmount, currency);
 
     const sale = await this.prisma.$transaction(async (tx) => {
-      const number = await this.numbers.next(tx, 'SO');
+      const number = await this.numbers.next(tx, 'SO', items);
       return tx.sale.create({
         data: {
           number,

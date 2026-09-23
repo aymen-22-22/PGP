@@ -348,7 +348,10 @@ export class PosService {
     const now = new Date();
     const result = await this.prisma.$transaction(
       async (tx) => {
-        const number = await this.numbers.next(tx, 'SO');
+        const number = await this.numbers.next(tx, 'SO', [
+          ...[...byProduct].map(([productId, b]) => ({ productId, quantity: b.imeis.length })),
+          ...[...bulkTotals].map(([productId, b]) => ({ productId, quantity: b.quantity })),
+        ]);
         const sale = await tx.sale.create({
           data: {
             number,

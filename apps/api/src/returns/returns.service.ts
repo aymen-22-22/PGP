@@ -110,7 +110,11 @@ export class ReturnsService {
     const now = new Date();
     const created = await this.prisma.$transaction(
       async (tx) => {
-        const number = await this.numbers.next(tx, 'RET');
+        const number = await this.numbers.next(
+          tx,
+          'RET',
+          devices.map((d) => ({ productId: d.productId, quantity: 1 })),
+        );
         const record = await tx.return.create({
           data: {
             number,
