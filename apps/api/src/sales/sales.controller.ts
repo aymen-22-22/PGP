@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -13,7 +14,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AdminOnly } from '../common/decorators/roles.decorator';
 import type { RequestUser } from '../common/types';
-import { CompleteSaleDto, CreateSaleDto, QuerySalesDto } from './dto/sale.dto';
+import { CompleteSaleDto, CreateSaleDto, QuerySalesDto, SalePaymentDto } from './dto/sale.dto';
 import { SalesService } from './sales.service';
 
 // Selling — quoting, invoicing, cancelling — is an office function in this
@@ -55,6 +56,24 @@ export class SalesController {
     @Body() dto: CompleteSaleDto,
   ) {
     return this.sales.complete(user, id, dto);
+  }
+
+  @Post(':id/payments')
+  @AdminOnly()
+  @ApiOperation({ summary: 'Record money received against a sale' })
+  addPayment(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: SalePaymentDto) {
+    return this.sales.addPayment(user, id, dto);
+  }
+
+  @Delete(':id/payments/:paymentId')
+  @AdminOnly()
+  @ApiOperation({ summary: 'Remove a payment recorded by mistake' })
+  removePayment(
+    @CurrentUser() user: RequestUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+  ) {
+    return this.sales.removePayment(user, id, paymentId);
   }
 
   @Post(':id/cancel')

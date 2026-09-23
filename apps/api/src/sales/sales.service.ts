@@ -8,7 +8,7 @@ import {
   TrackingMode,
   TransferStatus,
 } from '@prisma/client';
-import { AuditAction, ErrorCode, add, multiply } from '@phone-erp/shared-types';
+import { AuditAction, ErrorCode, add, multiply, subtract, toMinor } from '@phone-erp/shared-types';
 import { AuditService } from '../audit/audit.service';
 import { paginate } from '../common/dto/pagination.dto';
 import { BusinessError } from '../common/errors/business.error';
@@ -24,7 +24,7 @@ import { ExchangeRateService } from '../costing/exchange-rate.service';
 import { PricingService } from '../pricing/pricing.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StockService } from '../stock/stock.service';
-import { CompleteSaleDto, CreateSaleDto, QuerySalesDto } from './dto/sale.dto';
+import { CompleteSaleDto, CreateSaleDto, QuerySalesDto, SalePaymentDto } from './dto/sale.dto';
 
 /**
  * A device loaded onto one of these transfers is physically spoken for, even
@@ -57,6 +57,13 @@ export class SalesService {
       ...this.access.filterFor<Prisma.SaleWhereInput>(user, 'warehouseId', query.warehouseId),
       ...(query.status ? { status: query.status } : {}),
       ...(query.customerId ? { customerId: query.customerId } : {}),
+      ...(query.payment === 'UNPAID'
+        ? { amountPaid: { lte: 0 }, totalAmount: { gt: 0 }, status: { not: SaleStatus.CANCELLED } }
+        : query.payment === 'PARTIAL'
+          ? { amountPaid: { gt: 0, lt: this.prisma.sale.fields.totalAmount } }
+          : query.payment === 'PAID'
+            ? { amountPaid: { gte: this.prisma.sale.fields.totalAmount } }
+            : {}),
       ...(query.from || query.to
         ? {
             createdAt: {
@@ -88,6 +95,7 @@ export class SalesService {
           currency: true,
           totalAmount: true,
           totalCost: true,
+          amountPaid: true,
           completedAt: true,
           createdAt: true,
           customer: { select: { id: true, name: true } },
@@ -102,6 +110,7 @@ export class SalesService {
       ...s,
       totalAmount: s.totalAmount.toFixed(2),
       totalCost: s.totalCost.toFixed(2),
+      ...paymentSummary(s.totalAmount.toFixed(2), s.amountPaid.toFixed(2)),
       quantity: items.reduce((a, i) => a + i.quantity, 0),
       pickedQuantity: items.reduce((a, i) => a + i.pickedCount, 0),
     }));
@@ -116,6 +125,7 @@ export class SalesService {
         warehouse: { select: { id: true, name: true, code: true } },
         createdBy: { select: { id: true, name: true } },
         items: { include: { product: { select: { id: true, name: true, sku: true, tracking: true } } } },
+        payments: { orderBy: { paidAt: 'asc' }, include: { createdBy: { select: { id: true, name: true } } } },
       },
     });
     if (!sale) throw BusinessError.notFound('Sale', id);
@@ -139,6 +149,8 @@ export class SalesService {
       ...sale,
       totalAmount: sale.totalAmount.toFixed(2),
       totalCost: sale.totalCost.toFixed(2),
+      ...paymentSummary(sale.totalAmount.toFixed(2), sale.amountPaid.toFixed(2)),
+      payments: sale.payments.map((p) => ({ ...p, amount: p.amount.toFixed(2) })),
       devices,
       items: sale.items.map((i) => ({
         ...i,
@@ -228,6 +240,7 @@ export class SalesService {
       };
     });
     const totalAmount = items.reduce((sum, i) => add(sum, i.totalPrice), '0.00');
+    if (dto.payment) assertPayable(dto.payment.amount, totalAmount, '0.00');
 
     // Revenue is also held in the reporting currency at the rate of the day, so
     // margins across markets add up and never move afterwards.
@@ -248,6 +261,20 @@ export class SalesService {
           notes: dto.notes,
           createdById: user.id,
           items: { create: items },
+          ...(dto.payment
+            ? {
+                amountPaid: dto.payment.amount,
+                payments: {
+                  create: {
+                    amount: dto.payment.amount,
+                    method: dto.payment.method,
+                    paidAt: dto.payment.paidAt ? new Date(dto.payment.paidAt) : undefined,
+                    note: dto.payment.note,
+                    createdById: user.id,
+                  },
+                },
+              }
+            : {}),
         },
       });
     });
@@ -416,6 +443,59 @@ export class SalesService {
       cost: result.totalCost,
       completedAt: now.toISOString(),
     };
+  }
+
+  /** Money received against a sale; a sale can be paid in several goes. */
+  async addPayment(user: RequestUser, saleId: string, dto: SalePaymentDto) {
+    const sale = await this.prisma.sale.findUnique({ where: { id: saleId } });
+    if (!sale) throw BusinessError.notFound('Sale', saleId);
+    this.access.assertAccess(user, sale.warehouseId);
+    if (sale.status === SaleStatus.CANCELLED) {
+      throw new BusinessError(ErrorCode.INVALID_STATUS_TRANSITION, 'A cancelled sale cannot take a payment.');
+    }
+    assertPayable(dto.amount, sale.totalAmount.toFixed(2), sale.amountPaid.toFixed(2));
+
+    await this.prisma.$transaction([
+      this.prisma.salePayment.create({
+        data: {
+          saleId,
+          amount: dto.amount,
+          method: dto.method,
+          paidAt: dto.paidAt ? new Date(dto.paidAt) : undefined,
+          note: dto.note,
+          createdById: user.id,
+        },
+      }),
+      this.prisma.sale.update({ where: { id: saleId }, data: { amountPaid: { increment: dto.amount } } }),
+    ]);
+    await this.audit.log({
+      userId: user.id,
+      action: AuditAction.RECORD_PAYMENT,
+      entityType: 'Sale',
+      entityId: saleId,
+      metadata: { number: sale.number, amount: dto.amount, method: dto.method ?? 'CASH' },
+    });
+    return this.findOne(user, saleId);
+  }
+
+  /** Takes back a payment recorded by mistake. */
+  async removePayment(user: RequestUser, saleId: string, paymentId: string) {
+    const payment = await this.prisma.salePayment.findUnique({ where: { id: paymentId }, include: { sale: true } });
+    if (!payment || payment.saleId !== saleId) throw BusinessError.notFound('Payment', paymentId);
+    this.access.assertAccess(user, payment.sale.warehouseId);
+
+    await this.prisma.$transaction([
+      this.prisma.salePayment.delete({ where: { id: paymentId } }),
+      this.prisma.sale.update({ where: { id: saleId }, data: { amountPaid: { decrement: payment.amount } } }),
+    ]);
+    await this.audit.log({
+      userId: user.id,
+      action: AuditAction.DELETE_PAYMENT,
+      entityType: 'Sale',
+      entityId: saleId,
+      metadata: { number: payment.sale.number, amount: payment.amount.toFixed(2), method: payment.method },
+    });
+    return this.findOne(user, saleId);
   }
 
   async cancel(user: RequestUser, saleId: string) {
@@ -596,5 +676,29 @@ export class SalesService {
       throw new BusinessError(ErrorCode.VALIDATION_FAILED, 'Every line of this sale is already picked.');
     }
     return picks;
+  }
+}
+
+export type PaymentStatus = 'UNPAID' | 'PARTIAL' | 'PAID';
+
+/** Paid, half paid or not paid, and what is still owed. */
+export function paymentSummary(total: string, paid: string) {
+  const owed = toMinor(total) - toMinor(paid);
+  const status: PaymentStatus = toMinor(paid) <= 0n && toMinor(total) > 0n ? 'UNPAID' : owed > 0n ? 'PARTIAL' : 'PAID';
+  return { amountPaid: paid, balance: owed > 0n ? subtract(total, paid) : '0.00', paymentStatus: status };
+}
+
+/** A payment must be positive and never take the sale past its total. */
+function assertPayable(amount: string, total: string, alreadyPaid: string) {
+  if (toMinor(amount) <= 0n) {
+    throw new BusinessError(ErrorCode.VALIDATION_FAILED, 'A payment must be more than zero.');
+  }
+  if (toMinor(alreadyPaid) + toMinor(amount) > toMinor(total)) {
+    throw new BusinessError(
+      ErrorCode.VALIDATION_FAILED,
+      `This is more than what is owed (${subtract(total, alreadyPaid)}).`,
+      400,
+      { owed: subtract(total, alreadyPaid) },
+    );
   }
 }

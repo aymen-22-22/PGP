@@ -1,4 +1,4 @@
-import { ArrowLeft, PackageCheck, Wand2 } from 'lucide-react';
+import { ArrowLeft, FileText, PackageCheck, Wand2 } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { CancelAction } from '@/components/cancel-action';
@@ -12,6 +12,7 @@ import { CodeList } from '@/features/scanner/code-list';
 import { CodeScanInput } from '@/features/scanner/code-scan-input';
 import { ScanProgress } from '@/features/scanner/scan-list';
 import { useCodeBuffer } from '@/features/scanner/use-code-buffer';
+import { PaymentBadge, PaymentsCard, type PaymentStatus, type SalePayment } from '@/features/sales/payments';
 import { useApiMutation, useApiQuery } from '@/hooks/use-api';
 import { useI18n } from '@/i18n/provider';
 import { useAuth } from '@/lib/auth';
@@ -25,6 +26,10 @@ interface SaleDetail {
   currency: string;
   totalAmount: string;
   totalCost: string;
+  amountPaid: string;
+  balance: string;
+  paymentStatus: PaymentStatus;
+  payments: SalePayment[];
   completedAt: string | null;
   // Null for a counter sale to a walk-in.
   customer: { name: string; country: string | null } | null;
@@ -76,16 +81,28 @@ export default function SaleDetailPage() {
       <Card>
         <CardContent className="space-y-4 p-4 sm:p-5">
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <h1 className="tabular text-xl font-bold">{sale.number}</h1>
+            <div className="min-w-0">
+              <h1 className="tabular break-all text-xl font-bold">{sale.number}</h1>
               <p className="text-base font-medium">{sale.customer?.name ?? t('sale.walkInCustomer')}</p>
               <p className="text-sm text-muted-foreground">
                 {t('sale.from', { warehouse: sale.warehouse.name })}
                 {sale.completedAt && <> · {t('sale.completed', { date: dateTime(sale.completedAt) })}</>}
               </p>
             </div>
-            <StatusBadge status={sale.status} />
+            <div className="flex shrink-0 flex-col items-end gap-1.5">
+              <StatusBadge status={sale.status} />
+              {sale.status !== 'CANCELLED' && <PaymentBadge status={sale.paymentStatus} />}
+            </div>
           </div>
+
+          {sale.status !== 'CANCELLED' && (
+            <Button asChild variant="outline" className="gap-2">
+              <Link to={`/sales/${sale.id}/invoice?print=1`}>
+                <FileText className="h-4 w-4" />
+                {t('invoice.button')}
+              </Link>
+            </Button>
+          )}
 
           {canCancel && (
             <CancelAction
@@ -140,6 +157,19 @@ export default function SaleDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      <PaymentsCard
+        saleId={sale.id}
+        currency={sale.currency}
+        total={sale.totalAmount}
+        paid={sale.amountPaid}
+        balance={sale.balance}
+        status={sale.paymentStatus}
+        payments={sale.payments}
+        canEdit={isAdmin}
+        cancelled={sale.status === 'CANCELLED'}
+        onChange={() => void query.refetch()}
+      />
 
       {canComplete && <PickAndShip sale={sale} outstanding={outstanding} onDone={() => void query.refetch()} />}
 

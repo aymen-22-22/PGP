@@ -158,6 +158,15 @@ enum NotificationStatus {
   FAILED
 }
 
+/// How a customer paid (part of) a sale.
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+  CHEQUE
+  OTHER
+}
+
 enum SalesChannel {
   B2B
   POS
@@ -291,6 +300,7 @@ model User {
   costDocsPosted    CostDocument[]      @relation("CostDocumentPostedBy")
   pricesCreated     ProductPrice[]      @relation("ProductPriceCreatedBy")
   labelsReceived    PurchaseUnitLabel[]
+  salePayments      SalePayment[]       @relation("SalePaymentBy")
 
   @@index([warehouseId])
   @@index([isActive])
@@ -771,23 +781,44 @@ model Sale {
   /// Landed cost of the devices actually shipped, in the reporting currency.
   /// Recomputed when a late cost document restates the units on this sale.
   totalCost       Decimal      @default(0) @db.Decimal(16, 2)
+  /// Sum of the payments below, kept on the sale so "who owes us" is one query.
+  amountPaid      Decimal      @default(0) @db.Decimal(16, 2)
   notes           String?
   completedAt     DateTime?
   createdById     String?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
-  customer  Customer?  @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  warehouse Warehouse  @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
-  createdBy User?      @relation("SaleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  customer  Customer?     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  warehouse Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  createdBy User?         @relation("SaleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   items     SaleItem[]
   devices   Device[]
+  payments  SalePayment[]
 
   @@index([customerId])
   @@index([warehouseId, status])
   @@index([status])
   @@index([createdAt])
   @@index([channel, status])
+}
+
+/// Money received against a sale. Several make a partly-paid sale whole.
+model SalePayment {
+  id          String        @id @default(uuid())
+  saleId      String
+  amount      Decimal       @db.Decimal(16, 2)
+  method      PaymentMethod @default(CASH)
+  paidAt      DateTime      @default(now())
+  note        String?
+  createdById String?
+  createdAt   DateTime      @default(now())
+
+  sale      Sale  @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("SalePaymentBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([saleId])
+  @@index([paidAt])
 }
 
 model SaleItem {

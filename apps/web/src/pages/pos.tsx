@@ -1,13 +1,15 @@
-import { Banknote, Minus, Plus, Receipt, Trash2, TrendingUp } from 'lucide-react';
+import { Banknote, FileText, Minus, Plus, Receipt, Trash2, TrendingUp } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useMemo, useState } from 'react';
 import { BackButton } from '@/components/page';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label, Select } from '@/components/ui/input';
+import { Input, Label, Select } from '@/components/ui/input';
 import { EmptyState, ErrorState, FormError, LoadingState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
 import { CodeScanInput } from '@/features/scanner/code-scan-input';
 import type { CodeOutcome } from '@/features/scanner/use-code-buffer';
+import { PAYMENT_METHODS } from '@/features/sales/payments';
 import { useApiMutation, useApiQuery } from '@/hooks/use-api';
 import { api } from '@/lib/api';
 import { useI18n } from '@/i18n/provider';
@@ -90,6 +92,10 @@ export default function PosPage() {
   const [outcome, setOutcome] = useState<CodeOutcome | null>(null);
   const [rejected, setRejected] = useState<string | null>(null);
   const [customerId, setCustomerId] = useState('');
+  // Paid in full at the counter unless the seller says otherwise.
+  const [payMode, setPayMode] = useState<'FULL' | 'PART' | 'CREDIT'>('FULL');
+  const [partAmount, setPartAmount] = useState('');
+  const [payMethod, setPayMethod] = useState('CASH');
   const [busy, setBusy] = useState(false);
   const [receipt, setReceipt] = useState<Record<string, unknown> | null>(null);
   const [accessories, setAccessories] = useState<AccessoryLine[]>([]);
@@ -216,6 +222,10 @@ export default function PosPage() {
           ? { items: accessories.map((l) => ({ productId: l.productId, quantity: l.quantity })) }
           : {}),
         ...(customerId ? { customerId } : {}),
+        payment: {
+          amount: payMode === 'FULL' ? total.toFixed(2) : payMode === 'CREDIT' ? '0' : Number(partAmount || 0).toFixed(2),
+          method: payMethod,
+        },
       },
       {
         onSuccess: (result) => {
@@ -224,6 +234,8 @@ export default function PosPage() {
           setBasket([]);
           setAccessories([]);
           setCustomerId('');
+          setPayMode('FULL');
+          setPartAmount('');
           setOutcome(null);
           setBusy(false);
         },
@@ -444,6 +456,60 @@ export default function PosPage() {
               <span className="tabular text-stat">{money(total.toFixed(2), currency)}</span>
             </div>
 
+            <div className="space-y-2">
+              <Label>{t('payment.title')}</Label>
+              <div className="grid grid-cols-3 gap-1 rounded-lg border bg-muted p-1">
+                {(['FULL', 'PART', 'CREDIT'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={payMode === mode}
+                    onClick={() => setPayMode(mode)}
+                    className={`h-10 rounded-md text-sm font-semibold ${
+                      payMode === mode ? 'bg-card shadow-sm' : 'text-muted-foreground'
+                    }`}
+                  >
+                    {t(`pos.pay.${mode}`)}
+                  </button>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {payMode === 'PART' && (
+                  <Input
+                    inputMode="decimal"
+                    aria-label={t('payment.amount')}
+                    placeholder={(total / 2).toFixed(2)}
+                    value={partAmount}
+                    onChange={(e) => setPartAmount(e.target.value.replace(',', '.'))}
+                  />
+                )}
+                {payMode !== 'CREDIT' && (
+                  <Select
+                    aria-label={t('payment.methodLabel')}
+                    value={payMethod}
+                    onChange={(e) => setPayMethod(e.target.value)}
+                    className={payMode === 'PART' ? '' : 'col-span-2'}
+                  >
+                    {PAYMENT_METHODS.map((m) => (
+                      <option key={m} value={m}>
+                        {t(`payment.method.${m}`)}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </div>
+              {payMode !== 'FULL' && (
+                <p className="text-sm font-medium text-destructive">
+                  {t('payment.owes', {
+                    amount: money(
+                      Math.max(0, total - (payMode === 'PART' ? Number(partAmount || 0) : 0)).toFixed(2),
+                      currency,
+                    ),
+                  })}
+                </p>
+              )}
+            </div>
+
             <FormError error={sell.error} />
 
             <Button
@@ -570,6 +636,15 @@ function ReceiptView({ receipt, onNext }: { receipt: Record<string, unknown>; on
             {money(String(receipt.totalInBase), String(receipt.baseCurrency ?? 'EUR'))} at a rate of{' '}
             {Number(receipt.exchangeRate).toFixed(6)}
           </p>
+
+          {typeof receipt.saleId === 'string' && (
+            <Button asChild size="lg" variant="outline" className="w-full gap-2">
+              <Link to={`/sales/${receipt.saleId}/invoice?print=1`}>
+                <FileText className="h-5 w-5" />
+                {t('invoice.button')}
+              </Link>
+            </Button>
+          )}
 
           <Button size="xl" className="w-full" onClick={onNext}>
             {t('pos.nextSale')}

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Currency, SaleStatus } from '@prisma/client';
+import { Currency, PaymentMethod, SaleStatus } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -8,11 +8,13 @@ import {
   IsBoolean,
   IsEnum,
   IsISO8601,
+  IsIn,
   IsInt,
   IsNumberString,
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -28,6 +30,28 @@ export class SaleItemInputDto {
   @IsOptional()
   @IsNumberString()
   unitPrice?: string;
+}
+
+export class SalePaymentDto {
+  @ApiProperty({ example: '250.00', description: 'Amount received, in the sale currency' })
+  @Matches(/^\d{1,12}(\.\d{1,2})?$/, { message: 'amount must be a positive amount with at most 2 decimals' })
+  amount!: string;
+
+  @ApiPropertyOptional({ enum: PaymentMethod, default: PaymentMethod.CASH })
+  @IsOptional()
+  @IsEnum(PaymentMethod)
+  method?: PaymentMethod;
+
+  @ApiPropertyOptional({ description: 'When it was paid; defaults to now' })
+  @IsOptional()
+  @IsISO8601()
+  paidAt?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  note?: string;
 }
 
 export class CreateSaleDto {
@@ -52,6 +76,12 @@ export class CreateSaleDto {
   items!: SaleItemInputDto[];
 
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) notes?: string;
+
+  @ApiPropertyOptional({ type: () => SalePaymentDto, description: 'Money received when the order is taken' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SalePaymentDto)
+  payment?: SalePaymentDto;
 }
 
 export class CompleteSaleDto {
@@ -77,4 +107,8 @@ export class QuerySalesDto extends PaginationQueryDto {
   @ApiPropertyOptional() @IsOptional() @IsUUID() warehouseId?: string;
   @ApiPropertyOptional() @IsOptional() @IsISO8601() from?: string;
   @ApiPropertyOptional() @IsOptional() @IsISO8601() to?: string;
+  @ApiPropertyOptional({ enum: ['UNPAID', 'PARTIAL', 'PAID'] })
+  @IsOptional()
+  @IsIn(['UNPAID', 'PARTIAL', 'PAID'])
+  payment?: 'UNPAID' | 'PARTIAL' | 'PAID';
 }

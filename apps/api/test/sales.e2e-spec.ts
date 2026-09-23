@@ -34,6 +34,51 @@ describe('Sales, concurrency and profit (spec §16, §19, §28)', () => {
     await app.close();
   });
 
+  describe('payments', () => {
+    it('tracks unpaid, partly paid and paid, and refuses paying more than owed', async () => {
+      const sale = await as(app, admin)
+        .post('/api/v1/sales')
+        .send({
+          customerId: fixture.customer.id,
+          warehouseId: fixture.central.id,
+          items: [{ productId: fixture.product.id, quantity: 2, unitPrice: '500.00' }],
+          payment: { amount: '300.00', method: 'CASH' },
+        })
+        .expect(201);
+      expect(sale.body).toMatchObject({ paymentStatus: 'PARTIAL', amountPaid: '300.00', balance: '700.00' });
+
+      const over = await as(app, admin)
+        .post(`/api/v1/sales/${sale.body.id}/payments`)
+        .send({ amount: '800.00' })
+        .expect(400);
+      expect(over.body.details.owed).toBe('700.00');
+
+      await as(app, jean).post(`/api/v1/sales/${sale.body.id}/payments`).send({ amount: '10.00' }).expect(403);
+
+      const paid = await as(app, admin)
+        .post(`/api/v1/sales/${sale.body.id}/payments`)
+        .send({ amount: '700.00', method: 'TRANSFER', note: 'Bank transfer' })
+        .expect(201);
+      expect(paid.body).toMatchObject({ paymentStatus: 'PAID', amountPaid: '1000.00', balance: '0.00' });
+      expect(paid.body.payments).toHaveLength(2);
+
+      const partial = await as(app, admin).get('/api/v1/sales?payment=PAID').expect(200);
+      expect(partial.body.data.map((r: { id: string }) => r.id)).toContain(sale.body.id);
+
+      const undone = await as(app, admin)
+        .delete(`/api/v1/sales/${sale.body.id}/payments/${paid.body.payments[1].id}`)
+        .expect(200);
+      expect(undone.body).toMatchObject({ paymentStatus: 'PARTIAL', balance: '700.00' });
+    });
+
+    it('lists a sale with nothing paid as unpaid', async () => {
+      const sale = await createSale(1).expect(201);
+      expect(sale.body.paymentStatus).toBe('UNPAID');
+      const res = await as(app, admin).get('/api/v1/sales?payment=UNPAID').expect(200);
+      expect(res.body.data.map((r: { id: string }) => r.id)).toContain(sale.body.id);
+    });
+  });
+
   it('marks the exact scanned devices as sold', async () => {
     const sale = await createSale(3).expect(201);
     const res = await as(app, admin)

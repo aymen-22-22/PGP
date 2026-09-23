@@ -26,6 +26,8 @@ const PurchaseReceiveScanPage = lazy(() => import('@/pages/purchase-receive-scan
 const ReceiptsPage = lazy(() => import('@/pages/receipts'));
 const ReceivePage = lazy(() => import('@/pages/receive'));
 const SendPage = lazy(() => import('@/pages/send'));
+const SaleInvoicePage = lazy(() => import('@/pages/sale-invoice'));
+const CompanySettingsPage = lazy(() => import('@/pages/company-settings'));
 const TransfersPage = lazy(() => import('@/pages/transfers'));
 const TransferDetailPage = lazy(() => import('@/pages/transfer-detail'));
 
@@ -72,6 +74,17 @@ export function AppRouter() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      {/* Paper, not a screen: no navigation around it. */}
+      <Route
+        path="/sales/:id/invoice"
+        element={
+          <RequireAuth>
+            <Suspense fallback={<LoadingState />}>
+              <SaleInvoicePage />
+            </Suspense>
+          </RequireAuth>
+        }
+      />
       <Route
         element={
           <RequireAuth>
@@ -194,6 +207,14 @@ export function AppRouter() {
             element={
               <RequireAdmin>
                 <NotificationsPage />
+              </RequireAdmin>
+            }
+          />
+          <Route
+            path="settings/company"
+            element={
+              <RequireAdmin>
+                <CompanySettingsPage />
               </RequireAdmin>
             }
           />

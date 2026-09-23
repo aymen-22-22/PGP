@@ -54,6 +54,10 @@ export interface SaleListItem<TDate = string> {
   currency: Currency;
   totalAmount: string;
   totalCost: string;
+  amountPaid: string;
+  /** What the customer still owes. */
+  balance: string;
+  paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID';
   createdAt: TDate;
   completedAt: TDate | null;
   /** Null on a walk-in counter sale. */
