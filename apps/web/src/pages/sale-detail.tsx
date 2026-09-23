@@ -14,6 +14,7 @@ import { ScanProgress } from '@/features/scanner/scan-list';
 import { useCodeBuffer } from '@/features/scanner/use-code-buffer';
 import { useApiMutation, useApiQuery } from '@/hooks/use-api';
 import { useI18n } from '@/i18n/provider';
+import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
 import { formatImei, formatNumber } from '@/lib/utils';
 
@@ -49,6 +50,7 @@ interface SaleDetail {
 
 export default function SaleDetailPage() {
   const { t, dateTime, money } = useI18n();
+  const isAdmin = useAuth((s) => s.user?.role === 'ADMIN');
   const { id } = useParams<{ id: string }>();
   const toast = useToast();
   const query = useApiQuery<SaleDetail>(`/sales/${id}`);
@@ -58,8 +60,8 @@ export default function SaleDetailPage() {
 
   const sale = query.data!;
   const outstanding = sale.items.reduce((sum, i) => sum + (i.quantity - i.pickedCount), 0);
-  const canComplete = outstanding > 0 && ['DRAFT', 'CONFIRMED'].includes(sale.status);
-  const canCancel = ['DRAFT', 'CONFIRMED'].includes(sale.status);
+  const canComplete = isAdmin && outstanding > 0 && ['DRAFT', 'CONFIRMED'].includes(sale.status);
+  const canCancel = isAdmin && ['DRAFT', 'CONFIRMED'].includes(sale.status);
   const profit = (Number(sale.totalAmount) - Number(sale.totalCost)).toFixed(2);
 
   return (

@@ -59,7 +59,7 @@ export default function TransferDetailPage() {
   const isDestination = user?.role === 'ADMIN' || user?.warehouseId === transfer.destinationWarehouse.id;
   const canShip = isSource && ['DRAFT', 'READY'].includes(transfer.status);
   const canReceive = isDestination && transfer.status === 'IN_TRANSIT';
-  const canCancel = isSource && ['DRAFT', 'READY'].includes(transfer.status);
+  const canCancel = user?.role === 'ADMIN' && ['DRAFT', 'READY'].includes(transfer.status);
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
