@@ -1,5 +1,6 @@
 import { ConsoleLogger, type LogLevel as NestLevel } from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
+import { readFileSync } from 'node:fs';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { describeError, writeLog, type LogLevel } from './file-log';
 
@@ -43,6 +44,16 @@ export class FileLogger extends ConsoleLogger {
 
 const mb = (bytes: number) => Math.round(bytes / 1_048_576);
 
+/** Threads in this process (Linux) — the number a shared host's cap is counted against. */
+function threads(): number | null {
+  try {
+    const m = /Threads:\s+(\d+)/.exec(readFileSync('/proc/self/status', 'utf8'));
+    return m ? Number(m[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
 const stats = { requests: 0, errors: 0, slow: 0 };
 const SLOW_MS = Number(process.env.LOG_SLOW_MS || 3000);
 
@@ -84,6 +95,8 @@ export function installProcessMonitor(): void {
     env: process.env.NODE_ENV,
     build: process.env.BUILD_SHA ?? null,
     memoryMb: mb(process.memoryUsage().rss),
+    threads: threads(),
+    tokioWorkers: process.env.TOKIO_WORKER_THREADS ?? null,
   });
 
   process.on('uncaughtException', (error) => {
@@ -133,6 +146,7 @@ export function installProcessMonitor(): void {
       uptimeMin: Math.round(process.uptime() / 60),
       rssMb: rss,
       heapMb: mb(mem.heapUsed),
+      threads: threads(),
       eventLoopMaxMs: lagMs,
       requests: stats.requests,
       errors: stats.errors,
