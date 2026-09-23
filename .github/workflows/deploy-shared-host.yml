@@ -95,7 +95,15 @@ jobs:
       # state, so migrate's advisory lock can occasionally time out waiting
       # on Neon's compute to wake from scale-to-zero; one retry covers that
       # without masking a real failure on the second attempt.
+      # Migrate normally takes a Postgres advisory lock so two runs cannot
+      # migrate at once. Through Neon's pooler that session lock can be left
+      # held on a pooled server connection, and every later deploy then fails
+      # with P1002 "Timed out trying to acquire a postgres advisory lock". The
+      # concurrency group above already guarantees one deploy at a time, so
+      # the lock adds nothing here but that failure.
       - name: Apply pending migrations
+        env:
+          PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK: '1'
         run: npm run db:deploy -w @phone-erp/api || (echo "Retrying once after a pause — likely Neon waking from scale-to-zero" && sleep 15 && npm run db:deploy -w @phone-erp/api)
 
       - name: Build

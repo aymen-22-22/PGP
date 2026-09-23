@@ -63,7 +63,12 @@ jobs:
         run: npx prisma migrate status --schema apps/api/prisma/schema.prisma
         continue-on-error: true
 
+      # See deploy-shared-host.yml: through the pooler the advisory lock can be
+      # left held and time out every later run; the concurrency group already
+      # keeps runs one at a time.
       - name: Apply migrations
+        env:
+          PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK: '1'
         run: npm run db:deploy -w @phone-erp/api
 
       - name: Seed
