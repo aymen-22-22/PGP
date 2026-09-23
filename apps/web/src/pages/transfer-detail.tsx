@@ -119,7 +119,7 @@ export default function TransferDetailPage() {
             <dl className="grid grid-cols-2 gap-3 border-t pt-3 text-sm">
               <div>
                 <dt className="text-xs uppercase tracking-wide text-muted-foreground">{t('transfer.shipment')}</dt>
-                <dd className="tabular font-medium">{transfer.shipment.number}</dd>
+                <dd className="tabular break-all font-medium">{transfer.shipment.number}</dd>
               </div>
               <div>
                 <dt className="text-xs uppercase tracking-wide text-muted-foreground">{t('transfer.shipped')}</dt>

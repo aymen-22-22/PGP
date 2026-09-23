@@ -94,6 +94,7 @@ export default function PurchaseDetailPage() {
             to={{ name: purchase.warehouse.name, code: purchase.warehouse.code }}
             progress={ordered ? received / ordered : 0}
             cancelled={purchase.status === 'CANCELLED'}
+            tone="buying"
           />
 
           <Steps

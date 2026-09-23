@@ -1,4 +1,4 @@
-import { Check, Truck, X } from 'lucide-react';
+import { Check, PackageCheck, Truck, X } from 'lucide-react';
 import * as React from 'react';
 import { countryFromWarehouseCode, flagOf } from '@/lib/countries';
 import { cn } from '@/lib/utils';
@@ -18,6 +18,7 @@ export function RouteLine({
   to,
   progress,
   cancelled = false,
+  tone = 'moving',
   className,
 }: {
   from: Place;
@@ -25,30 +26,38 @@ export function RouteLine({
   /** 0 = not left yet, 0.5 = on the road, 1 = arrived. */
   progress: number;
   cancelled?: boolean;
+  /** Buying routes are blue, moving ones orange; arriving is always blue. */
+  tone?: 'buying' | 'moving';
   className?: string;
 }) {
   const pct = Math.max(0, Math.min(1, progress)) * 100;
   return (
-    <div className={cn('flex items-center gap-3', className)}>
+    <div className={cn('flex items-center gap-2 sm:gap-3', className)}>
       <PlaceTag place={from} />
-      <div className="relative h-10 flex-1">
+      <div className="relative h-10 min-w-[5rem] flex-1">
         <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full border-t-2 border-dashed border-muted-foreground/30" />
         <div
           className={cn(
             'absolute start-0 top-1/2 h-1 -translate-y-1/2 rounded-full transition-[width] duration-700',
-            cancelled ? 'bg-destructive/60' : 'bg-orange-500',
+            cancelled ? 'bg-destructive/60' : tone === 'buying' ? 'bg-blue-600' : 'bg-orange-500',
           )}
           style={{ width: `${pct}%` }}
         />
         <span
           className={cn(
             'absolute top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border-2 bg-card shadow-sm',
-            cancelled ? 'border-destructive text-destructive' : pct >= 100 ? 'border-success text-success' : 'border-orange-500 text-orange-600',
+            cancelled
+              ? 'border-destructive text-destructive'
+              : pct >= 100
+                ? 'border-blue-600 bg-blue-600 text-white'
+                : tone === 'buying'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-orange-500 text-orange-600',
           )}
           style={{ insetInlineStart: `calc((100% - 2.25rem) * ${pct / 100})` }}
           aria-hidden
         >
-          {cancelled ? <X className="h-4 w-4" /> : pct >= 100 ? <Check className="h-4 w-4" /> : <Truck className="h-4 w-4 rtl:-scale-x-100" />}
+          {cancelled ? <X className="h-4 w-4" /> : pct >= 100 ? <PackageCheck className="h-4 w-4" /> : <Truck className="h-4 w-4 rtl:-scale-x-100" />}
         </span>
       </div>
       <PlaceTag place={to} align="end" />
@@ -58,11 +67,11 @@ export function RouteLine({
 
 function PlaceTag({ place, align = 'start' }: { place: Place; align?: 'start' | 'end' }) {
   return (
-    <div className={cn('flex min-w-0 max-w-[40%] flex-col', align === 'end' ? 'items-end text-end' : 'items-start')}>
+    <div className={cn('flex min-w-0 max-w-[35%] flex-col', align === 'end' ? 'items-end text-end' : 'items-start')}>
       <span className="text-2xl leading-none" aria-hidden>
         {flagOf(countryFromWarehouseCode(place.code))}
       </span>
-      <span className="mt-1 truncate text-sm font-semibold">{place.name}</span>
+      <span className="mt-1 text-sm font-semibold leading-tight [overflow-wrap:anywhere]">{place.name}</span>
     </div>
   );
 }

@@ -337,12 +337,16 @@ export default function StockProduct360Page() {
                 return (
                   <li key={movement.id} className="relative pb-5 last:pb-0">
                     <span
-                      className={`absolute -start-[2.15rem] flex h-7 w-7 items-center justify-center rounded-full text-white shadow-sm ${MOVEMENT_COLOUR[movement.type] ?? 'bg-slate-500'}`}
+                      className={`absolute -start-[calc(2.375rem+1px)] flex h-7 w-7 items-center justify-center rounded-full text-white shadow-sm ${MOVEMENT_COLOUR[movement.type] ?? 'bg-slate-500'}`}
                     >
                       <Icon className="h-3.5 w-3.5" aria-hidden />
                     </span>
                     <div className="flex flex-wrap items-baseline gap-x-2">
-                      <p className="font-semibold leading-tight">{t(`movement.type.${movement.type}`)}</p>
+                      <p className="font-semibold leading-tight">
+                        {movement.type in MOVEMENT_COLOUR
+                          ? t(`journey.move.${movement.type}`, { to: movement.to ?? movement.from ?? warehouse.name })
+                          : t(`movement.type.${movement.type}`)}
+                      </p>
                       <span className="tabular text-sm text-muted-foreground">
                         {movement.kind === 'QUANTITY'
                           ? `${movement.quantity > 0 ? '+' : ''}${n(movement.quantity)}`
