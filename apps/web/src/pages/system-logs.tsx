@@ -1,12 +1,15 @@
-import { Activity, AlertOctagon, AlertTriangle, Download, HeartPulse, Info, RefreshCw, RotateCcw } from 'lucide-react';
-import { useState } from 'react';
+import { Activity, AlertOctagon, AlertTriangle, BellRing, Download, HeartPulse, Info, RefreshCw, RotateCcw, Send } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { PageHeader, SearchField } from '@/components/page';
 import { Button } from '@/components/ui/button';
-import { Select } from '@/components/ui/input';
+import { Input, Select } from '@/components/ui/input';
+import { useToast } from '@/components/ui/toast';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
-import { useApiQuery } from '@/hooks/use-api';
+import { useApiMutation, useApiQuery } from '@/hooks/use-api';
 import { useDebounce } from '@/hooks/use-debounce';
 import { useI18n } from '@/i18n/provider';
+import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 type Level = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
@@ -121,6 +124,8 @@ export default function SystemLogsPage() {
         </div>
       )}
 
+      <ErrorAlerts />
+
       {health.data?.today.lastProblem && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm">
           <p className="font-semibold text-red-800">{t('logs.lastProblem')}</p>
@@ -187,6 +192,84 @@ export default function SystemLogsPage() {
         <p className="text-xs text-muted-foreground">{t('logs.more', { shown: logs.data.data.length, total: logs.data.total })}</p>
       )}
     </div>
+  );
+}
+
+interface Alerts {
+  enabled: boolean;
+  recipients: string[];
+  lastSentAt: string | null;
+}
+
+/** Who gets an email when the server logs an error or crashes. */
+function ErrorAlerts() {
+  const { t, dateTime } = useI18n();
+  const toast = useToast();
+  const query = useApiQuery<Alerts>('/system/alerts');
+  const [enabled, setEnabled] = useState(false);
+  const [text, setText] = useState('');
+
+  useEffect(() => {
+    if (!query.data) return;
+    setEnabled(query.data.enabled);
+    setText(query.data.recipients.join(', '));
+  }, [query.data]);
+
+  const recipients = text.split(/[\s,;]+/).map((r) => r.trim()).filter(Boolean);
+  const save = useApiMutation(() => api.put<Alerts>('/system/alerts', { enabled, recipients }), ['/system/alerts']);
+  const test = useApiMutation(() => api.post('/system/alerts/test', { recipients }), []);
+
+  return (
+    <section className="rounded-xl border bg-card p-4 sm:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 font-semibold">
+          <BellRing className="h-4 w-4 text-primary" />
+          {t('alerts.title')}
+        </h2>
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <input type="checkbox" className="h-4 w-4" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+          {t('alerts.enabled')}
+        </label>
+      </div>
+      <p className="mt-1 text-sm text-muted-foreground">{t('alerts.lead')}</p>
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+        <Input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="admin@example.com, it@example.com"
+          aria-label={t('alerts.recipients')}
+        />
+        <Button
+          disabled={save.isPending || (enabled && recipients.length === 0)}
+          onClick={() =>
+            save.mutate(undefined, {
+              onSuccess: () => toast.push('success', t('alerts.saved')),
+              onError: (error) => toast.push('error', error.message),
+            })
+          }
+        >
+          {save.isPending ? t('common.saving') : t('alerts.save')}
+        </Button>
+        <Button
+          variant="outline"
+          className="gap-2"
+          disabled={test.isPending || recipients.length === 0}
+          onClick={() =>
+            test.mutate(undefined, {
+              onSuccess: () => toast.push('success', t('alerts.testSent')),
+              onError: (error) => toast.push('error', error.message),
+            })
+          }
+        >
+          <Send className="h-4 w-4" />
+          {t('alerts.test')}
+        </Button>
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">
+        {query.data?.lastSentAt ? t('alerts.lastSent', { when: dateTime(query.data.lastSentAt) }) : t('alerts.never')}{' '}
+        · <Link to="/settings/email" className="font-medium text-primary hover:underline">{t('alerts.mailServer')}</Link>
+      </p>
+    </section>
   );
 }
 

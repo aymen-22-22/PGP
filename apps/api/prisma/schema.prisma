@@ -1109,3 +1109,12 @@ model DocumentCounter {
 
   @@id([scope, year])
 }
+
+/// Settings an administrator changes from the app rather than the server's
+/// environment — mail server, error alerts. One row per setting, JSON value.
+model AppSetting {
+  key         String   @id
+  value       Json
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+}

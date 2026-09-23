@@ -598,3 +598,16 @@ Reading the pattern:
 
 Settings: `LOG_DIR`, `LOG_KEEP_DAYS` (14), `LOG_SLOW_MS` (3000),
 `LOG_HEARTBEAT_MS` (300000), `LOG_MEMORY_WARN_MB` (400), `LOG_DEBUG`.
+
+### Email server and error alerts from the app
+
+**Settings → Email server** (admins) sets the SMTP server from the app. Once
+saved there it takes over from `SMTP_*`/`MAIL_FROM` in the environment; the
+password is encrypted in the database with a key derived from `JWT_SECRET`
+(changing that secret means entering the password again). "Use the server file
+settings instead" forgets the saved copy. **Send test** connects and sends one
+real email.
+
+**Settings → Server logs → Error alerts** emails a summary of new `error` and
+`fatal` log lines to the addresses listed, at most once every 5 minutes. A
+start-up failure is reported by the next process that starts successfully.

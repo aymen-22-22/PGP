@@ -2,6 +2,19 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { createTransport, type Transporter } from 'nodemailer';
 import { APP_CONFIG } from '../common/tokens';
 import type { AppConfig } from '../config/configuration';
+import { SettingsService, type SmtpSettings } from '../settings/settings.service';
+
+export interface MailServer {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  pass: string;
+  from: string;
+  enabled: boolean;
+  /** Where these settings came from — the app's Settings page or the server's environment. */
+  source: 'app' | 'env';
+}
 
 /**
  * The SMTP connection, and nothing else.
@@ -15,13 +28,36 @@ import type { AppConfig } from '../config/configuration';
 export class MailerService {
   private readonly log = new Logger(MailerService.name);
   private transport: Transporter | null = null;
+  private transportKey = '';
   /** Only populated by the in-memory transport used in tests. */
   private readonly outbox: { to: string[]; subject: string; html: string; text: string }[] = [];
 
-  constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {}
+  constructor(
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
+    private readonly settings: SettingsService,
+  ) {}
 
-  get enabled(): boolean {
-    return this.config.mail.enabled;
+  /**
+   * The mail server in use: what an admin saved in Settings, or else the
+   * environment. Saved settings win so the server can be changed without SSH.
+   */
+  async server(): Promise<MailServer> {
+    const saved = await this.settings.get<SmtpSettings>('smtp');
+    if (saved?.host) {
+      let pass = '';
+      try {
+        pass = saved.passEnc ? this.settings.decrypt(saved.passEnc) : '';
+      } catch {
+        this.log.warn('The saved mail password could not be decrypted (JWT secret changed?) — enter it again');
+      }
+      return { host: saved.host, port: saved.port, secure: saved.secure, user: saved.user, pass, from: saved.from, enabled: saved.enabled, source: 'app' };
+    }
+    const { host, port, secure, user, pass, from, enabled } = this.config.mail;
+    return { host, port, secure, user, pass, from, enabled, source: 'env' };
+  }
+
+  async isEnabled(): Promise<boolean> {
+    return (await this.server()).enabled;
   }
 
   /**
@@ -34,19 +70,20 @@ export class MailerService {
   async send(message: { to: string[]; subject: string; html: string; text: string }): Promise<void> {
     if (message.to.length === 0) return;
 
-    const transport = this.connect();
+    const server = await this.server();
+    const transport = this.connect(server);
     await transport.sendMail({
-      from: this.config.mail.from,
+      from: server.from,
       // Recipients go in bcc: an operational email should not hand every
       // warehouse a list of everyone else's address.
       bcc: message.to,
-      to: this.config.mail.from,
+      to: server.from,
       subject: message.subject,
       html: message.html,
       text: message.text,
     });
 
-    if (this.isCapturing) this.outbox.push(message);
+    if (!server.host) this.outbox.push(message);
   }
 
   /** Messages captured in memory. Empty unless the capturing transport is in use. */
@@ -58,25 +95,45 @@ export class MailerService {
     this.outbox.length = 0;
   }
 
-  private get isCapturing(): boolean {
-    return !this.config.mail.host;
+  /** Drops the open connection so the next send picks up changed settings. */
+  reset(): void {
+    this.transport?.close();
+    this.transport = null;
+    this.transportKey = '';
   }
 
-  private connect(): Transporter {
-    if (this.transport) return this.transport;
+  /** Opens a one-off connection and checks the server accepts the login. */
+  async verify(server: MailServer): Promise<void> {
+    if (!server.host) throw new Error('No mail server host set.');
+    const probe = this.build(server);
+    try {
+      await probe.verify();
+    } finally {
+      probe.close();
+    }
+  }
 
-    if (this.isCapturing) {
+  private connect(server: MailServer): Transporter {
+    const key = JSON.stringify([server.host, server.port, server.secure, server.user, server.pass]);
+    if (this.transport && this.transportKey === key) return this.transport;
+    this.transport?.close();
+    this.transportKey = key;
+    this.transport = this.build(server);
+    return this.transport;
+  }
+
+  private build(server: MailServer): Transporter {
+    if (!server.host) {
       // No host configured. `jsonTransport` serialises the message and returns
       // it instead of opening a socket, so nothing is ever sent by accident
       // from a test run or a half-configured install.
-      this.transport = createTransport({ jsonTransport: true });
-      return this.transport;
+      return createTransport({ jsonTransport: true });
     }
 
-    const { host, port, secure, user, pass } = this.config.mail;
-    this.log.log(`Mail: ${user ? `${user}@` : ''}${host}:${port}${secure ? ' (TLS)' : ' (STARTTLS)'}`);
+    const { host, port, secure, user, pass } = server;
+    this.log.log(`Mail: ${user ? `${user}@` : ''}${host}:${port}${secure ? ' (TLS)' : ' (STARTTLS)'} [${server.source}]`);
 
-    this.transport = createTransport({
+    return createTransport({
       host,
       port,
       secure,
@@ -86,6 +143,5 @@ export class MailerService {
       greetingTimeout: 10_000,
       socketTimeout: 20_000,
     });
-    return this.transport;
   }
 }
