@@ -16,6 +16,7 @@ import { isAdmin, useAuth } from '@/lib/auth';
 import { useT } from '@/i18n/provider';
 import { sellsAtCounter } from '@/lib/navigation';
 import { cn } from '@/lib/utils';
+import { AREAS, areaForPath } from '@/lib/areas';
 
 /**
  * Bottom navigation for warehouse staff on a phone (spec §30).
@@ -110,7 +111,7 @@ export function MobileLayout() {
                 className={({ isActive }) =>
                   cn(
                     'flex w-full touch-target flex-col items-center justify-center gap-0.5 px-0.5 py-2 text-center text-[0.65rem] font-medium leading-tight transition-colors',
-                    isActive ? 'text-primary' : 'text-muted-foreground',
+                    isActive ? (centre ? 'text-primary' : AREAS[areaForPath(to) ?? 'overview'].text) : 'text-muted-foreground',
                   )
                 }
               >

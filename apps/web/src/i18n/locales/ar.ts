@@ -13,6 +13,11 @@ const ar: Record<string, string> = {
   'app.name': 'Phone ERP',
   'app.shop': 'المتجر',
 
+  'area.overview': 'نظرة عامة',
+  'area.buying': 'الشراء',
+  'area.moving': 'نقل المخزون',
+  'area.selling': 'البيع',
+  'area.admin': 'الإعدادات',
   'nav.section.overview': 'نظرة عامة',
   'nav.section.inbound': 'الوارد',
   'nav.section.distribution': 'التوزيع',

@@ -11,6 +11,7 @@ import { useAuth } from '@/lib/auth';
 import { LABEL_SIZES } from '@/lib/label-sizes';
 import { LOCALES, type Locale } from '@/i18n/core';
 import { useI18n, useT } from '@/i18n/provider';
+import { AREAS, areaOfSection } from '@/lib/areas';
 import { bottomTabsFor, navigationExcluding } from '@/lib/navigation';
 
 /** Reachable from the header on every screen. */
@@ -54,7 +55,7 @@ export default function MorePage() {
                   to={to}
                   className="flex touch-target items-center gap-3 px-4 text-[0.95rem] font-medium transition-colors active:bg-accent hover:bg-accent/50"
                 >
-                  <Icon className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden />
+                  <Icon className={`h-5 w-5 shrink-0 ${AREAS[areaOfSection(section.title)].text}`} aria-hidden />
                   <span className="flex-1">{t(label)}</span>
                   <ChevronRight className="h-4 w-4 text-muted-foreground rtl:rotate-180" aria-hidden />
                 </Link>

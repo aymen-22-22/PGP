@@ -4,6 +4,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { isAdmin, useAuth } from '@/lib/auth';
 import { useT } from '@/i18n/provider';
+import { AREAS, areaOfSection } from '@/lib/areas';
 import { navigationFor } from '@/lib/navigation';
 import { cn } from '@/lib/utils';
 
@@ -58,6 +59,7 @@ export function DesktopLayout() {
               item.to === '/' ? pathname === '/' : pathname === item.to || pathname.startsWith(`${item.to}/`),
             );
             const open = hasActive || !collapsed.includes(section.title);
+            const area = AREAS[areaOfSection(section.title)];
             return (
               <div key={section.title} className="mb-2">
                 <button
@@ -67,7 +69,10 @@ export function DesktopLayout() {
                   aria-expanded={open}
                   className="flex w-full items-center justify-between rounded px-2 py-1.5 text-[0.68rem] font-semibold uppercase tracking-wider text-sidebar-muted hover:text-sidebar-foreground disabled:cursor-default disabled:hover:text-sidebar-muted"
                 >
-                  {t(section.title)}
+                  <span className="flex items-center gap-2">
+                    <span className={cn('h-2 w-2 rounded-full', area.solid)} aria-hidden />
+                    {t(section.title)}
+                  </span>
                   <ChevronDown
                     className={cn('h-3.5 w-3.5 transition-transform', !open && '-rotate-90', hasActive && 'opacity-0')}
                     aria-hidden
@@ -84,12 +89,12 @@ export function DesktopLayout() {
                             cn(
                               'flex items-center gap-2.5 rounded border-s-2 px-2.5 py-1.5 text-sm transition-colors',
                               isActive
-                                ? 'border-sidebar-primary bg-sidebar-accent font-semibold text-sidebar-foreground'
+                                ? cn('bg-sidebar-accent font-semibold text-sidebar-foreground', area.border)
                                 : 'border-transparent text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground',
                             )
                           }
                         >
-                          <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                          <Icon className={cn('h-4 w-4 shrink-0', area.onDark)} aria-hidden />
                           {t(label)}
                         </NavLink>
                       </li>

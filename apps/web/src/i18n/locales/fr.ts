@@ -9,6 +9,11 @@ const fr: Record<string, string> = {
   'app.name': 'Phone ERP',
   'app.shop': 'Magasin',
 
+  'area.overview': 'Vue d’ensemble',
+  'area.buying': 'Achats',
+  'area.moving': 'Mouvements de stock',
+  'area.selling': 'Ventes',
+  'area.admin': 'Réglages',
   'nav.section.overview': 'Vue d’ensemble',
   'nav.section.inbound': 'Entrées',
   'nav.section.distribution': 'Distribution',

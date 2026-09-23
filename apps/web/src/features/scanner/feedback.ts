@@ -9,7 +9,7 @@
 type Tone = 'accepted' | 'duplicate' | 'rejected';
 
 const TONES: Record<Tone, { hz: number; ms: number; gain: number }> = {
-  accepted: { hz: 2000, ms: 45, gain: 0.05 },
+  accepted: { hz: 1760, ms: 70, gain: 0.05 },
   duplicate: { hz: 900, ms: 110, gain: 0.05 },
   rejected: { hz: 320, ms: 260, gain: 0.07 },
 };
@@ -49,14 +49,20 @@ export function scanFeedback(tone: Tone): void {
       primeScanFeedback();
       if (context) {
         const { hz, ms, gain } = TONES[tone];
-        const osc = context.createOscillator();
-        const vol = context.createGain();
-        osc.type = 'square';
-        osc.frequency.value = hz;
-        vol.gain.value = gain;
-        osc.connect(vol).connect(context.destination);
-        osc.start();
-        osc.stop(context.currentTime + ms / 1000);
+        // A good scan is a rising two-note chime; anything else is one flat tone.
+        const notes = tone === 'accepted' ? [hz * 0.66, hz] : [hz];
+        notes.forEach((freq, i) => {
+          const start = context!.currentTime + i * (ms / 1000);
+          const osc = context!.createOscillator();
+          const vol = context!.createGain();
+          osc.type = tone === 'accepted' ? 'sine' : 'square';
+          osc.frequency.value = freq;
+          vol.gain.setValueAtTime(gain * (tone === 'accepted' ? 2 : 1), start);
+          vol.gain.exponentialRampToValueAtTime(0.0001, start + ms / 1000);
+          osc.connect(vol).connect(context!.destination);
+          osc.start(start);
+          osc.stop(start + ms / 1000);
+        });
       }
     } catch {
       /* a missing beep must never interrupt a scan */

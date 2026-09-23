@@ -4,7 +4,9 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/lib/auth';
+import { AREAS, areaForPath } from '@/lib/areas';
 import { bottomTabsFor, NAV_SECTIONS } from '@/lib/navigation';
+import { useT } from '@/i18n/provider';
 import { cn } from '@/lib/utils';
 
 const MENU_PAGES = new Set(NAV_SECTIONS.flatMap((section) => section.items.map((item) => item.to)));
@@ -58,11 +60,20 @@ export function PageHeader({
   /** Set false on a page that is itself a starting point. */
   back?: boolean;
 }) {
+  const t = useT();
+  const areaId = areaForPath(useLocation().pathname);
+  const area = areaId ? AREAS[areaId] : null;
   return (
     <div className="flex flex-col gap-1">
       {back && <BackButton />}
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
+          {area && (
+            <span className={cn('mb-1.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold', area.soft)}>
+              <area.icon className="h-3.5 w-3.5" aria-hidden />
+              {t(area.label)}
+            </span>
+          )}
           <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
           {description && <p className="text-sm text-muted-foreground">{description}</p>}
         </div>

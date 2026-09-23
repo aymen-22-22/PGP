@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { LoadingState } from '@/components/ui/states';
 import { CodeScanInput } from '@/features/scanner/code-scan-input';
+import { scanFeedback } from '@/features/scanner/feedback';
 import { classifyBarcode } from '@phone-erp/shared-types';
 import { useT } from '@/i18n/provider';
 import { api } from '@/lib/api';
@@ -58,9 +59,16 @@ export default function ScanPage() {
    * number, product or SKU — which is genuinely useful, and means the scanner
    * can always be tested with whatever barcode is to hand.
    */
+  // The flash, chime and buzz follow what the lookup found, not merely that a
+  // code was read — a green tick on an unknown code would be a lie.
+  const report = (code: string, problem: string | null) => {
+    setOutcome(problem ? { kind: 'stray', code, reason: problem } : { kind: 'accepted', code });
+    scanFeedback(problem ? 'rejected' : 'accepted');
+  };
+
   const lookup = async (value: string, raw?: string) => {
     const payload = (raw ?? value).trim();
-    setOutcome({ kind: 'accepted', code: value });
+    setOutcome(null);
     setBusy(true);
     setResult(null);
     setMatches(null);
@@ -71,7 +79,9 @@ export default function ScanPage() {
       // verify resolves an IMEI or one of our own unit labels; anything else
       // is worth searching for rather than refusing outright.
       if (classified.kind === 'IMEI' || classified.kind === 'LABEL') {
-        setResult(await api.post<VerifyResponse>('/imeis/verify', { imei: payload.trim() }));
+        const verified = await api.post<VerifyResponse>('/imeis/verify', { imei: payload.trim() });
+        setResult(verified);
+        report(value, verified.device ? null : (verified.message ?? t('scan.notFound')));
         return;
       }
       // Not an IMEI — look for it as a serial, product or SKU instead.
@@ -80,7 +90,9 @@ export default function ScanPage() {
         `/imeis/search?q=${encodeURIComponent(term)}&limit=20`,
       );
       setMatches(found.data);
+      report(value, found.data.length ? null : t('scan.notFound'));
     } catch {
+      report(value, t('state.error.unreachable'));
       setResult({
         imei: value,
         accepted: false,
