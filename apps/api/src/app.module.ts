@@ -34,6 +34,7 @@ import { ReportsModule } from './reports/reports.module';
 import { ReturnsModule } from './returns/returns.module';
 import { SalesModule } from './sales/sales.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
+import { SystemModule } from './system/system.module';
 import { TransfersModule } from './transfers/transfers.module';
 import { UsersModule } from './users/users.module';
 import { WarehousesModule } from './warehouses/warehouses.module';
@@ -99,6 +100,7 @@ function noStore(_request: Request, response: Response, next: NextFunction): voi
     InventoryModule,
     ImeisModule,
     ReportsModule,
+    SystemModule,
   ],
   providers: [
     // Order matters: authenticate, then check CSRF, then role, then rate limit.
