@@ -2,6 +2,7 @@ import { Camera, CameraOff, Flashlight, FlashlightOff } from 'lucide-react';
 
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { useI18n } from '@/i18n/provider';
 
 /**
  * Camera scanning with two backends:
@@ -31,6 +32,10 @@ export const cameraScanSupported = (): boolean =>
   typeof window !== 'undefined' && !!navigator.mediaDevices;
 
 export function CameraScanner({ onDetect }: { onDetect: (value: string) => void }) {
+  const { t } = useI18n();
+  // Read from inside the camera callbacks, which outlive a render.
+  const tr = useRef(t);
+  tr.current = t;
   const videoRef = useRef<HTMLVideoElement>(null);
   const [active, setActive] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
@@ -94,7 +99,7 @@ export function CameraScanner({ onDetect }: { onDetect: (value: string) => void 
     const startFallback = async (): Promise<void> => {
       // Roughly 115 kB gzipped, fetched only now. Say so, or the operator taps
       // the button on a slow link and thinks nothing happened.
-      setStatus('Preparing the scanner…');
+      setStatus(tr.current('camera.preparing'));
       const { BrowserMultiFormatReader } = await import('@zxing/browser');
       const { BarcodeFormat, DecodeHintType } = await import('@zxing/library');
 
@@ -123,7 +128,7 @@ export function CameraScanner({ onDetect }: { onDetect: (value: string) => void 
       // than a not-found error, which happens on iOS before the first frame is
       // ready — and then the camera sits on with nothing scanning. Here any
       // error just means "try the next frame".
-      setStatus('Point the camera at the label and hold still.');
+      setStatus(tr.current('camera.point'));
       // Decode a downscaled crop of the guide band rather than the whole frame.
       // A full 1080p pass costs well over a tenth of a second in pure
       // JavaScript; the band the operator is actually aiming at is a fraction
@@ -202,7 +207,7 @@ export function CameraScanner({ onDetect }: { onDetect: (value: string) => void 
             /* a frame with no readable code — try the next one */
             if (!hinted && Date.now() - startedAt > 7000) {
               hinted = true;
-              setStatus('No luck yet — hold the label about 15 cm away, fill the box, and keep it steady.');
+              setStatus(tr.current('camera.noLuck'));
             }
           }
         }
@@ -245,10 +250,10 @@ export function CameraScanner({ onDetect }: { onDetect: (value: string) => void 
         const name = (err as { name?: string } | null)?.name ?? '';
         setError(
           name === 'NotAllowedError' || name === 'SecurityError'
-            ? 'Camera access was blocked. Allow it for this site in your browser settings, or use the scanner.'
+            ? tr.current('camera.blocked')
             : name === 'NotFoundError'
-              ? 'No camera on this device. Use the scanner or type the IMEI.'
-              : 'Camera unavailable. Use the scanner or type the IMEI.',
+              ? tr.current('camera.none')
+              : tr.current('camera.unavailable'),
         );
         setStatus(null);
         setActive(false);
@@ -273,7 +278,7 @@ export function CameraScanner({ onDetect }: { onDetect: (value: string) => void 
     <div className="space-y-2">
       <Button variant="outline" className="w-full gap-2" onClick={() => setActive((a) => !a)}>
         {active ? <CameraOff className="h-5 w-5" /> : <Camera className="h-5 w-5" />}
-        {active ? 'Stop camera' : 'Scan with camera'}
+        {active ? t('camera.stop') : t('camera.start')}
       </Button>
 
       {active && (
@@ -299,7 +304,7 @@ export function CameraScanner({ onDetect }: { onDetect: (value: string) => void 
               }}
             >
               {torchOn ? <FlashlightOff className="h-4 w-4" /> : <Flashlight className="h-4 w-4" />}
-              {torchOn ? 'Light off' : 'Light'}
+              {torchOn ? t('camera.lightOff') : t('camera.light')}
             </Button>
           )}
         </div>

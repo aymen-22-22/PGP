@@ -255,6 +255,7 @@ function ReceiveTransfer({ target, onDone }: { target: Target; onDone: () => voi
     expected: outstanding.size,
     expectedCodes: outstanding,
     strayReason: t('receive.notOnShipment'),
+    storageKey: `transfer-receive:${target.id}`,
   });
 
   const receive = useApiMutation(
@@ -276,7 +277,7 @@ function ReceiveTransfer({ target, onDone }: { target: Target; onDone: () => voi
 
       <CodeScanInput outcome={buffer.lastOutcome} onScan={(code) => buffer.add(code)} />
 
-      <CodeList entries={buffer.entries} onRemove={buffer.remove} />
+      <CodeList entries={buffer.entries} onRemove={buffer.remove} onUndo={buffer.undo} restored={buffer.restored} />
 
       <FormError error={receive.error} />
 
@@ -288,6 +289,7 @@ function ReceiveTransfer({ target, onDone }: { target: Target; onDone: () => voi
           receive.mutate(undefined, {
             onSuccess: () => {
               toast.push('success', t('receive.booked', { count: buffer.count }));
+              buffer.reset();
               onDone();
             },
             onError: (e) => toast.push('error', e.message),
