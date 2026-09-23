@@ -213,7 +213,7 @@ export class PurchasesService {
         items: { include: { product: { select: { id: true, name: true, sku: true, tracking: true } } } },
         // For the notification: who sent the goods, and where they landed.
         supplier: { select: { name: true } },
-        warehouse: { select: { name: true } },
+        warehouse: { select: { name: true, code: true } },
       },
     });
     if (!purchase) throw BusinessError.notFound('Purchase', purchaseId);
@@ -522,7 +522,23 @@ export class PurchasesService {
       referenceType: 'Purchase',
       referenceId: purchase.id,
       facts: {
-        headline: missing > 0 ? 'Goods received short' : 'Goods received',
+        headline: missing > 0 ? `Part of the order arrived in ${warehouseName}` : `Arrived in ${warehouseName}`,
+        journey: {
+          area: 'buying',
+          from: { name: supplierName },
+          to: { name: warehouseName, code: purchase.warehouse.code },
+          progress: expectedTotal ? receivedTotal / expectedTotal : 1,
+          steps: [
+            { label: 'Ordered', state: 'done', note: purchase.number },
+            {
+              label: 'Arrived',
+              state: missing > 0 ? 'current' : 'done',
+              note: `${receivedTotal} of ${expectedTotal}`,
+            },
+            { label: 'Checked', state: requiresValidation ? 'current' : 'done' },
+            { label: 'In stock', state: requiresValidation ? 'todo' : 'done', note: warehouseName },
+          ],
+        },
         facts: [
           { label: 'Purchase', value: purchase.number },
           { label: 'Supplier', value: supplierName },

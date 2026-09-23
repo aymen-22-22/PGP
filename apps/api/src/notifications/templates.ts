@@ -31,6 +31,106 @@ export interface MessageFacts {
   /** Where to open the document in the app. */
   link?: string | null;
   linkLabel?: string;
+  /** Drawn above the facts: where the goods are, and which steps are done. */
+  journey?: Journey;
+}
+
+export type Area = 'buying' | 'moving' | 'selling';
+
+export interface JourneyPlace {
+  name: string;
+  /** Warehouse code like "ES-01"; its prefix picks the flag. */
+  code?: string | null;
+}
+
+export interface Journey {
+  area: Area;
+  from?: JourneyPlace;
+  to?: JourneyPlace;
+  /** 0 = not left, 1 = arrived. */
+  progress?: number;
+  steps: { label: string; state: 'done' | 'current' | 'todo'; note?: string | null }[];
+}
+
+/** The same colours as the areas in the app, so the mail looks like it came from it. */
+const AREA: Record<Area, { colour: string; soft: string; label: string; icon: string }> = {
+  buying: { colour: '#2563eb', soft: '#eff6ff', label: 'Buying', icon: '&#128722;' },
+  moving: { colour: '#ea580c', soft: '#fff7ed', label: 'Moving stock', icon: '&#128666;' },
+  selling: { colour: '#059669', soft: '#ecfdf5', label: 'Selling', icon: '&#128176;' },
+};
+
+const FLAGS: Record<string, string> = {
+  FR: '&#127467;&#127479;',
+  ES: '&#127466;&#127480;',
+  DZ: '&#127465;&#127487;',
+};
+
+const flag = (place: JourneyPlace): string => {
+  const prefix = place.code?.match(/^([A-Z]{2})-/)?.[1];
+  return (prefix && FLAGS[prefix]) || '&#127981;';
+};
+
+const DONE = '#16a34a';
+const TODO = '#cbd5e1';
+
+function renderJourney(j: Journey): string {
+  const area = AREA[j.area];
+  const pct = Math.round(Math.max(0, Math.min(1, j.progress ?? 0)) * 100);
+
+  const route =
+    j.from && j.to
+      ? `
+    <tr><td style="padding:20px 24px 4px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td width="96" align="center" valign="top" style="font-size:12px;font-weight:700;color:${INK};">
+            <div style="font-size:30px;line-height:1;">${flag(j.from)}</div>
+            <div style="margin-top:4px;">${escape(j.from.name)}</div>
+          </td>
+          <td valign="middle" style="padding:0 6px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                ${pct > 0 ? `<td width="${pct}%" style="height:6px;background:${area.colour};border-radius:3px;font-size:0;line-height:0;">&nbsp;</td>` : ''}
+                <td width="32" align="center" style="font-size:22px;line-height:1;">${pct >= 100 ? '&#9989;' : '&#128666;'}</td>
+                ${pct < 100 ? `<td style="height:6px;background:${TODO};border-radius:3px;font-size:0;line-height:0;">&nbsp;</td>` : ''}
+              </tr>
+            </table>
+          </td>
+          <td width="96" align="center" valign="top" style="font-size:12px;font-weight:700;color:${INK};">
+            <div style="font-size:30px;line-height:1;">${flag(j.to)}</div>
+            <div style="margin-top:4px;">${escape(j.to.name)}</div>
+          </td>
+        </tr>
+      </table>
+    </td></tr>`
+      : '';
+
+  const width = Math.floor(100 / j.steps.length);
+  const steps = j.steps
+    .map((step, i) => {
+      const bg = step.state === 'done' ? DONE : step.state === 'current' ? area.colour : '#ffffff';
+      const fg = step.state === 'todo' ? '#94a3b8' : '#ffffff';
+      const border = step.state === 'todo' ? TODO : bg;
+      const mark = step.state === 'done' ? '&#10003;' : String(i + 1);
+      return `
+        <td width="${width}%" align="center" valign="top" style="padding:0 4px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" align="center"><tr>
+            <td width="30" height="30" align="center" valign="middle" style="width:30px;height:30px;border-radius:15px;background:${bg};border:2px solid ${border};color:${fg};font-size:14px;font-weight:700;">${mark}</td>
+          </tr></table>
+          <div style="margin-top:6px;font-size:12px;font-weight:700;color:${step.state === 'todo' ? '#94a3b8' : INK};">${escape(step.label)}</div>
+          ${step.note ? `<div style="font-size:11px;color:${MUTED};margin-top:2px;">${escape(step.note)}</div>` : ''}
+        </td>`;
+    })
+    .join('');
+
+  return `${route}
+    <tr><td style="padding:16px 24px 8px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${area.soft};border-radius:8px;">
+        <tr><td style="padding:14px 6px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>${steps}</tr></table>
+        </td></tr>
+      </table>
+    </td></tr>`;
 }
 
 const INK = '#1a2028';
@@ -74,17 +174,21 @@ export function renderMessage(facts: MessageFacts): { html: string; text: string
     )
     .join('');
 
+  const area = facts.journey ? AREA[facts.journey.area] : null;
+  const accent = area?.colour ?? INK;
+
   const html = `<!doctype html>
 <html>
 <body style="margin:0;padding:24px 12px;background:#eef0f4;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid ${RULE};border-radius:6px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid ${RULE};border-radius:10px;">
     <tr>
-      <td style="padding:20px 24px;border-bottom:2px solid ${INK};">
-        <div style="font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:${MUTED};">Phone ERP</div>
-        <div style="font-size:19px;font-weight:700;color:${INK};line-height:1.3;margin-top:2px;">${escape(facts.headline)}</div>
-        <div style="font-size:13px;color:${MUTED};font-family:monospace;margin-top:2px;">${escape(facts.reference)}</div>
+      <td style="padding:22px 24px;background:${accent};border-radius:10px 10px 0 0;">
+        <div style="font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:rgba(255,255,255,.8);">Phone ERP${area ? ` &middot; ${area.label}` : ''}</div>
+        <div style="font-size:22px;font-weight:700;color:#ffffff;line-height:1.3;margin-top:4px;">${area ? `${area.icon}&nbsp; ` : ''}${escape(facts.headline)}</div>
+        <div style="font-size:13px;color:rgba(255,255,255,.85);font-family:monospace;margin-top:4px;">${escape(facts.reference)}</div>
       </td>
     </tr>
+    ${facts.journey ? renderJourney(facts.journey) : ''}
     ${
       facts.alert
         ? `<tr><td style="padding:12px 24px;background:${ALERT_BG};border-bottom:1px solid ${RULE};">
@@ -117,7 +221,7 @@ export function renderMessage(facts: MessageFacts): { html: string; text: string
     ${
       facts.link
         ? `<tr><td style="padding:12px 24px 24px;">
-             <a href="${escape(facts.link)}" style="display:inline-block;background:${INK};color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 18px;border-radius:5px;">${escape(facts.linkLabel ?? 'Open in the app')}</a>
+             <a href="${escape(facts.link)}" style="display:inline-block;background:${accent};color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:12px 22px;border-radius:8px;">${escape(facts.linkLabel ?? 'Open in the app')}</a>
            </td></tr>`
         : ''
     }
@@ -134,6 +238,13 @@ export function renderMessage(facts: MessageFacts): { html: string; text: string
     facts.headline,
     facts.reference,
     '',
+    ...(facts.journey
+      ? [
+          ...(facts.journey.from && facts.journey.to ? [`${facts.journey.from.name} -> ${facts.journey.to.name}`] : []),
+          facts.journey.steps.map((st) => `${st.state === 'done' ? '[x]' : st.state === 'current' ? '[>]' : '[ ]'} ${st.label}`).join('  '),
+          '',
+        ]
+      : []),
     ...(facts.alert ? [`! ${facts.alert}`, ''] : []),
     ...facts.facts.map((f) => `${f.label}: ${f.value}`),
     '',
