@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Keyboard, Volume2, VolumeX } from 'lucide-react';
+import { AlertTriangle, Check, CheckCircle2, Keyboard, RotateCcw, Volume2, VolumeX, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { CameraScanner } from './camera-scanner';
 import { isScanFeedbackMuted, primeScanFeedback, scanFeedback, setScanFeedbackMuted } from './feedback';
@@ -139,6 +139,30 @@ function CodeFeedback({ outcome }: { outcome: CodeOutcome | null }) {
   const Icon = config.icon;
 
   return (
+    <>
+      {/* A full-screen flash the operator catches from the corner of their eye,
+          so they never need to look at the screen to know the scan landed. */}
+      <div
+        key={`${outcome.kind}:${outcome.code}`}
+        aria-hidden
+        className={cn(
+          'pointer-events-none fixed inset-0 z-50 flex animate-scan-flash items-center justify-center [animation-fill-mode:forwards]',
+          { accepted: 'bg-success/15', duplicate: 'bg-warning/15', stray: 'bg-destructive/15' }[outcome.kind],
+        )}
+      >
+        <div className="flex max-w-xs flex-col items-center gap-2 rounded-2xl bg-card/95 px-6 py-5 text-center shadow-2xl">
+          <span
+            className={cn(
+              'flex h-16 w-16 items-center justify-center rounded-full text-white',
+              { accepted: 'bg-success', duplicate: 'bg-warning', stray: 'bg-destructive' }[outcome.kind],
+            )}
+          >
+            {outcome.kind === 'accepted' ? <Check className="h-9 w-9" strokeWidth={3} /> : outcome.kind === 'duplicate' ? <RotateCcw className="h-8 w-8" strokeWidth={3} /> : <X className="h-9 w-9" strokeWidth={3} />}
+          </span>
+          <p className="text-base font-bold">{config.title}</p>
+          <p className="tabular text-xs text-muted-foreground">{outcome.code}</p>
+        </div>
+      </div>
     <div
       role="status"
       aria-live="assertive"
@@ -150,6 +174,7 @@ function CodeFeedback({ outcome }: { outcome: CodeOutcome | null }) {
         <p className="tabular truncate text-xs">{outcome.code}</p>
       </div>
     </div>
+    </>
   );
 }
 

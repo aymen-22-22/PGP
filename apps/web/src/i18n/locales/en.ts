@@ -13,6 +13,11 @@ const en = {
   'app.name': 'Phone ERP',
   'app.shop': 'Shop',
 
+  'area.overview': 'Overview',
+  'area.buying': 'Buying',
+  'area.moving': 'Moving stock',
+  'area.selling': 'Selling',
+  'area.admin': 'Settings',
   'nav.section.overview': 'Overview',
   'nav.section.inbound': 'Inbound',
   'nav.section.distribution': 'Distribution',

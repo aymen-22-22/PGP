@@ -21,6 +21,7 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "db:imeis": "ts-node --transpile-only prisma/print-imeis.ts",
     "db:reset": "prisma migrate reset --force",
+    "db:fresh-start": "ts-node --transpile-only prisma/scripts/fresh-start.ts",
     "db:reset-stock-and-warehouses": "ts-node --transpile-only prisma/scripts/reset-stock-and-warehouses.ts",
     "simulate": "node scripts/simulate.mjs"
   },
