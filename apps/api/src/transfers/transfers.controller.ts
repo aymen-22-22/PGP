@@ -11,6 +11,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { AdminOnly } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { RequestUser } from '../common/types';
 import {
@@ -96,6 +97,7 @@ export class TransfersController {
   }
 
   @Post(':id/cancel')
+  @AdminOnly()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Cancel a transfer that has not been shipped' })
   cancel(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string) {

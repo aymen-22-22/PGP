@@ -127,4 +127,14 @@ describe('RBAC and warehouse isolation (spec §24)', () => {
       await as(app, adminToken).patch(`/api/v1/users/${fixture.admin.id}`).send({ isActive: false }).expect(400);
     });
   });
+  describe('only an administrator can cancel', () => {
+    it.each(['purchases', 'sales', 'transfers'])('refuses a warehouse user cancelling %s', async (kind) => {
+      const res = await as(app, jeanToken).post(`/api/v1/${kind}/${fixture.purchase.id}/cancel`).send({}).expect(403);
+      expect(res.body.code).toBe('FORBIDDEN');
+    });
+
+    it('lets the administrator cancel a purchase', async () => {
+      await as(app, adminToken).post(`/api/v1/purchases/${fixture.purchase.id}/cancel`).send({}).expect(200);
+    });
+  });
 });

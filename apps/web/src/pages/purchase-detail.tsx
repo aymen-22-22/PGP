@@ -10,6 +10,7 @@ import { TableWrap, Td, Th, Tr } from '@/components/ui/table';
 import { useToast } from '@/components/ui/toast';
 import { useApiMutation, useApiQuery } from '@/hooks/use-api';
 import { useI18n } from '@/i18n/provider';
+import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
 import { formatDate, formatNumber } from '@/lib/utils';
 
@@ -47,6 +48,7 @@ interface PurchaseDetail {
 
 export default function PurchaseDetailPage() {
   const { t, dateTime, money } = useI18n();
+  const isAdmin = useAuth((s) => s.user?.role === 'ADMIN');
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const toast = useToast();
@@ -149,7 +151,7 @@ export default function PurchaseDetailPage() {
                   </Link>
                 </Button>
               )}
-              {(purchase.status === 'DRAFT' || purchase.status === 'ORDERED') && (
+              {isAdmin && (purchase.status === 'DRAFT' || purchase.status === 'ORDERED') && (
                 <CancelAction
                   path={`/purchases/${id}/cancel`}
                   confirmLabel={t('purchase.cancelConfirm')}
