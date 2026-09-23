@@ -67,7 +67,10 @@ export default function SendPage() {
   );
 
   const planned = Number(quantity);
-  const buffer = useCodeBuffer({ expected: planned > 0 ? planned : undefined });
+  const buffer = useCodeBuffer({
+    expected: planned > 0 ? planned : undefined,
+    storageKey: destinationId && productId ? `send:${destinationId}:${productId}` : undefined,
+  });
 
   const send = useApiMutation<{ id: string; number: string }, void>(async () => {
     // Create with the scanned units already loaded, then dispatch: two calls,
@@ -123,7 +126,7 @@ export default function SendPage() {
 
         <CodeScanInput outcome={buffer.lastOutcome} onScan={(code) => buffer.add(code)} />
 
-        <CodeList entries={buffer.entries} onRemove={buffer.remove} />
+        <CodeList entries={buffer.entries} onRemove={buffer.remove} onUndo={buffer.undo} restored={buffer.restored} />
 
         <FormError error={send.error} />
 
@@ -135,6 +138,7 @@ export default function SendPage() {
             send.mutate(undefined, {
               onSuccess: (transfer) => {
                 toast.push('success', t('send.sent', { number: transfer.number, count: buffer.count }));
+                buffer.reset();
                 navigate(`/transfers/${transfer.id}`);
               },
               onError: (error) => toast.push('error', error.message),

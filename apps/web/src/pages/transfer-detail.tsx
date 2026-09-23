@@ -195,7 +195,7 @@ export default function TransferDetailPage() {
 function PrepareAndShip({ transfer, onDone }: { transfer: TransferDetail; onDone: () => void }) {
   const { t } = useI18n();
   const toast = useToast();
-  const buffer = useCodeBuffer();
+  const buffer = useCodeBuffer({ storageKey: `transfer-load:${transfer.id}` });
 
   const autoFill = useApiMutation(
     () => api.post<{ added: number }>(`/transfers/${transfer.id}/auto-fill`),
@@ -228,7 +228,7 @@ function PrepareAndShip({ transfer, onDone }: { transfer: TransferDetail; onDone
 
             {buffer.count > 0 && (
               <>
-                <CodeList entries={buffer.entries} onRemove={buffer.remove} />
+                <CodeList entries={buffer.entries} onRemove={buffer.remove} onUndo={buffer.undo} restored={buffer.restored} />
                 <Button
                   size="lg"
                   className="w-full"
@@ -321,6 +321,7 @@ function ReceiveShipment({ transfer, onDone }: { transfer: TransferDetail; onDon
     expected,
     expectedCodes,
     strayReason: t('transfer.strayReason'),
+    storageKey: `transfer-receive:${transfer.id}`,
   });
   const [allowPartial, setAllowPartial] = useState(false);
 
@@ -359,7 +360,7 @@ function ReceiveShipment({ transfer, onDone }: { transfer: TransferDetail; onDon
           </div>
         )}
 
-        <CodeList entries={buffer.entries} onRemove={buffer.remove} />
+        <CodeList entries={buffer.entries} onRemove={buffer.remove} onUndo={buffer.undo} restored={buffer.restored} />
 
         {buffer.count > 0 && buffer.count < expected && (
           <label className="flex touch-target items-center gap-3 rounded-md border p-3">

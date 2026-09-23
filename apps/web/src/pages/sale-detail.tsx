@@ -217,7 +217,7 @@ function PickAndShip({
 }) {
   const { t } = useI18n();
   const toast = useToast();
-  const buffer = useCodeBuffer({ expected: outstanding });
+  const buffer = useCodeBuffer({ expected: outstanding, storageKey: `sale-pick:${sale.id}` });
   const [confirmingAuto, setConfirmingAuto] = useState(false);
   const over = buffer.count > outstanding;
 
@@ -257,7 +257,7 @@ function PickAndShip({
           </div>
         )}
 
-        <CodeList entries={buffer.entries} onRemove={buffer.remove} />
+        <CodeList entries={buffer.entries} onRemove={buffer.remove} onUndo={buffer.undo} restored={buffer.restored} />
 
         <FormError error={complete.error} />
 
