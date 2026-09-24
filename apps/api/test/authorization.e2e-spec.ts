@@ -1,6 +1,7 @@
+import request from 'supertest';
 import { INestApplication } from '@nestjs/common';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { Fixture, as, createTestApp, login, receiveDevices, seedFixture } from './helpers';
+import { Fixture, PASSWORD, as, createTestApp, login, receiveDevices, seedFixture } from './helpers';
 
 describe('RBAC and warehouse isolation (spec §24)', () => {
   let app: INestApplication;
@@ -127,6 +128,48 @@ describe('RBAC and warehouse isolation (spec §24)', () => {
       await as(app, adminToken).patch(`/api/v1/users/${fixture.admin.id}`).send({ isActive: false }).expect(400);
     });
   });
+  describe('an administrator manages users', () => {
+    it('edits a name, email and password; the old password stops working', async () => {
+      await as(app, adminToken)
+        .patch(`/api/v1/users/${fixture.carlos.id}`)
+        .send({ name: 'Carlos M.', email: 'carlos.new@phone-erp.test', password: 'BrandNewPass123!' })
+        .expect(200);
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/login')
+        .send({ email: fixture.carlos.email, password: PASSWORD })
+        .expect(401);
+      await login(app, 'carlos.new@phone-erp.test', 'BrandNewPass123!');
+    });
+
+    it('deletes someone who never signed in, and archives someone with history', async () => {
+      const fresh = await as(app, adminToken)
+        .post('/api/v1/users')
+        .send({ name: 'Temp', email: 'temp@phone-erp.test', password: 'TempPassword123!', role: 'ADMIN' })
+        .expect(201);
+      const removed = await as(app, adminToken).delete(`/api/v1/users/${fresh.body.id}`).expect(200);
+      expect(removed.body.deleted).toBe('removed');
+      expect(await prisma.user.findUnique({ where: { id: fresh.body.id } })).toBeNull();
+
+      const archived = await as(app, adminToken).delete(`/api/v1/users/${fixture.jean.id}`).expect(200);
+      expect(archived.body.deleted).toBe('archived');
+      // Signed out, cannot sign in, gone from the list, name kept for history.
+      await as(app, jeanToken).get('/api/v1/auth/me').expect(401);
+      const list = await as(app, adminToken).get('/api/v1/users?pageSize=100').expect(200);
+      expect(list.body.data.map((u: { id: string }) => u.id)).not.toContain(fixture.jean.id);
+      expect((await prisma.user.findUnique({ where: { id: fixture.jean.id } }))?.name).toBeTruthy();
+      // The email is free for someone new.
+      await as(app, adminToken)
+        .post('/api/v1/users')
+        .send({ name: 'New Jean', email: fixture.jean.email, password: 'AnotherPass123!', role: 'ADMIN' })
+        .expect(201);
+    });
+
+    it('refuses deleting yourself, and a warehouse user cannot delete anyone', async () => {
+      await as(app, adminToken).delete(`/api/v1/users/${fixture.admin.id}`).expect(400);
+      await as(app, carlosToken).delete(`/api/v1/users/${fixture.jean.id}`).expect(403);
+    });
+  });
+
   describe('only an administrator can cancel', () => {
     it.each(['purchases', 'sales', 'transfers'])('refuses a warehouse user cancelling %s', async (kind) => {
       const res = await as(app, jeanToken).post(`/api/v1/${kind}/${fixture.purchase.id}/cancel`).send({}).expect(403);

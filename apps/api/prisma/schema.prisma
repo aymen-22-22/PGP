@@ -264,6 +264,9 @@ model User {
   role                  Role                  @default(WAREHOUSE_USER)
   warehouseId           String?
   costCenterId          String?
+  /// Set when an admin deletes someone who has history: they can no longer sign in
+  /// and leave the user list, but their name stays on what they did.
+  deletedAt             DateTime?
   isActive              Boolean               @default(true)
   // Bumped on password change / deactivation so already-issued JWTs stop working.
   tokenVersion          Int                   @default(0)
