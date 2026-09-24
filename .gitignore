@@ -21,3 +21,4 @@ tmp/
 
 # Runtime log files written by the API (see apps/api/src/logging)
 logs/
+/uploads/

@@ -197,7 +197,7 @@ describe('Stock explorer', () => {
         .attach('image', PNG, 'yard.png')
         .expect(201);
 
-      expect(upload.body.imageUrl).toMatch(/^\/uploads\/warehouses\/[0-9a-f-]{36}\.png$/);
+      expect(upload.body.imageUrl).toMatch(/^\/api\/uploads\/warehouses\/[0-9a-f-]{36}\.png$/);
 
       const cards = await as(app, admin).get('/api/v1/stock-explorer/warehouses').expect(200);
       const central = cards.body.data.find((w: { code: string }) => w.code === 'CENTRAL');

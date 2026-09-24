@@ -71,7 +71,10 @@ export class ImageStorageService {
     await mkdir(dir, { recursive: true });
     await writeFile(join(dir, name), data);
 
-    return `/uploads/${folder}/${name}`;
+    // Under /api so it reaches the application on a host that only routes
+    // /api to Node (cPanel/Passenger) — anything else gets the web app's
+    // index.html back, which an <img> shows as a broken "?".
+    return `/api/uploads/${folder}/${name}`;
   }
 
   /**
@@ -84,7 +87,7 @@ export class ImageStorageService {
   async remove(imageUrl: string | null): Promise<void> {
     if (!imageUrl) return;
 
-    const match = /^\/uploads\/(products|warehouses|brands)\/([0-9a-f-]{36}\.(?:jpg|png|webp))$/.exec(imageUrl);
+    const match = /^(?:\/api)?\/uploads\/(products|warehouses|brands)\/([0-9a-f-]{36}\.(?:jpg|png|webp))$/.exec(imageUrl);
     if (!match) return;
 
     try {
