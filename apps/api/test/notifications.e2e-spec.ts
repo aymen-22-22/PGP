@@ -57,6 +57,30 @@ describe('Notifications', () => {
     await app.close();
   });
 
+  describe('ordering', () => {
+    it('tells the receiving warehouse that goods are on the way', async () => {
+      await as(app, admin)
+        .post('/api/v1/purchases')
+        .send({
+          supplierId: fixture.supplier.id,
+          warehouseId: fixture.france.id,
+          items: [{ productId: fixture.product.id, quantity: 4, unitPrice: '900.00' }],
+        })
+        .expect(201);
+      await notifications.flush();
+
+      const [row] = await prisma.notification.findMany({ where: { event: 'PURCHASE_ORDERED' } });
+      expect(row.recipients).toContain(fixture.jean.email);
+      expect(row.recipients).not.toContain(fixture.carlos.email);
+      expect(row.recipients).not.toContain(fixture.admin.email);
+
+      const [message] = mailer.sent();
+      expect(message.subject).toMatch(/^Goods on the way · PO-/);
+      expect(message.text).toContain('4 units on the way to France Warehouse');
+      expect(message.text).toContain('Ordered by: Admin');
+    });
+  });
+
   describe('goods-in', () => {
     it('emails what arrived, with the products, who and when', async () => {
       // The whole order, so this is a clean receipt rather than a short one.

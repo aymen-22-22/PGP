@@ -285,6 +285,7 @@ export function renderMessage(facts: MessageFacts): { html: string; text: string
 /** The subject line, which is most of what gets read. */
 export function subjectFor(event: NotificationEvent, reference: string, warehouse: string): string {
   const titles: Record<NotificationEvent, string> = {
+    PURCHASE_ORDERED: 'Goods on the way',
     PURCHASE_RECEIVED: 'Goods received',
     SHORT_DELIVERY: 'Short delivery',
     RECEIPT_VALIDATED: 'Receipt validated',
