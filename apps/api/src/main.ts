@@ -48,15 +48,17 @@ async function bootstrap(): Promise<void> {
   // holds only what the upload endpoint chose to name.
   const uploadDir = resolve(config.uploads.dir);
   mkdirSync(join(uploadDir, 'products'), { recursive: true });
-  app.use(
-    '/uploads',
-    express.static(uploadDir, {
-      index: false,
-      dotfiles: 'deny',
-      // Names carry a random id, so a given URL never changes content.
-      setHeaders: (res) => res.setHeader('Cache-Control', 'public, max-age=31536000, immutable'),
-    }),
-  );
+  const serveUploads = express.static(uploadDir, {
+    index: false,
+    dotfiles: 'deny',
+    // Names carry a random id, so a given URL never changes content.
+    setHeaders: (res) => res.setHeader('Cache-Control', 'public, max-age=31536000, immutable'),
+  });
+  // /api/uploads is the address photos get now: it reaches the application
+  // even where the host routes only /api to it. /uploads stays for any link
+  // saved before the move.
+  app.use('/api/uploads', serveUploads);
+  app.use('/uploads', serveUploads);
 
   // Optionally serve the built web app from the API itself.
   //
