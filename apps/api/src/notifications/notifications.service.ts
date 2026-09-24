@@ -14,6 +14,8 @@ import { renderMessage, subjectFor, type MessageFacts } from './templates';
  * mattered is filtered too.
  */
 const AUDIENCE: Record<NotificationEvent, { admins: boolean; warehouses: 'source' | 'destination' | 'both' }> = {
+  // The warehouse needs to expect it; the admin who ordered it already knows.
+  PURCHASE_ORDERED: { admins: false, warehouses: 'destination' },
   // Someone ordered these; the warehouse that booked them in already knows.
   PURCHASE_RECEIVED: { admins: true, warehouses: 'destination' },
   // Money. Whoever can chase the supplier needs to see it.

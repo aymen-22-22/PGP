@@ -145,6 +145,7 @@ enum CostDocumentStatus {
 /// with B2B so there is only ever one source of sales truth.
 /// What happened, and therefore what the message says.
 enum NotificationEvent {
+  PURCHASE_ORDERED
   PURCHASE_RECEIVED
   SHORT_DELIVERY
   RECEIPT_VALIDATED

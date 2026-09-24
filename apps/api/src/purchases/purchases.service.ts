@@ -198,7 +198,56 @@ export class PurchasesService {
       entityId: purchase.id,
       metadata: { number: purchase.number, totalAmount, lines: items.length },
     });
+    await this.notifyOrdered(user, purchase.id);
     return this.findOne(user, purchase.id);
+  }
+
+  /** Tells the receiving warehouse that goods are on their way to them. Never throws. */
+  private async notifyOrdered(user: RequestUser, purchaseId: string): Promise<void> {
+    const purchase = await this.prisma.purchase.findUnique({
+      where: { id: purchaseId },
+      include: {
+        supplier: { select: { name: true } },
+        warehouse: { select: { name: true, code: true } },
+        items: { include: { product: { select: { name: true, sku: true } } } },
+      },
+    });
+    if (!purchase) return;
+    const units = purchase.items.reduce((s, i) => s + i.quantity, 0);
+    await this.notifications.notify({
+      event: 'PURCHASE_ORDERED',
+      reference: purchase.number,
+      warehouseName: purchase.warehouse.name,
+      destinationWarehouseId: purchase.warehouseId,
+      referenceType: 'Purchase',
+      referenceId: purchase.id,
+      facts: {
+        headline: `${units} unit${units === 1 ? '' : 's'} on the way to ${purchase.warehouse.name}`,
+        journey: {
+          area: 'buying',
+          from: { name: purchase.supplier.name },
+          to: { name: purchase.warehouse.name, code: purchase.warehouse.code },
+          progress: 0,
+          steps: [
+            { label: 'Ordered', state: 'done', note: purchase.number },
+            { label: 'Arrived', state: 'current', note: 'Scan it in when it lands' },
+            { label: 'Checked', state: 'todo' },
+            { label: 'In stock', state: 'todo', note: purchase.warehouse.name },
+          ],
+        },
+        facts: [
+          { label: 'Purchase', value: purchase.number },
+          { label: 'Supplier', value: purchase.supplier.name },
+          { label: 'Coming to', value: purchase.warehouse.name },
+          { label: 'Ordered by', value: user.name },
+          { label: 'Ordered on', value: purchase.purchaseDate.toLocaleDateString('en-GB') },
+          { label: 'Expected', value: `${units} units` },
+        ],
+        lines: purchase.items.map((i) => ({ product: i.product.name, sku: i.product.sku, quantity: i.quantity })),
+        link: `${this.config.frontendUrl}/purchases/${purchase.id}`,
+        linkLabel: 'Open the purchase',
+      },
+    });
   }
 
   /**
