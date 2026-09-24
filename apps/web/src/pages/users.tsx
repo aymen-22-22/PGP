@@ -1,4 +1,4 @@
-import { Plus, UserCog } from 'lucide-react';
+import { Pencil, Plus, Trash2, UserCog } from 'lucide-react';
 import { useState } from 'react';
 import { Pagination } from '@/components/pagination';
 import { PageHeader, SearchField } from '@/components/page';
@@ -33,11 +33,20 @@ export default function UsersPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<UserRow | null>(null);
   const debounced = useDebounce(search);
 
-  const query = useApiList<UserRow>('/users', { search: debounced || undefined, page, pageSize: 25 });
+  const query = useApiList<UserRow>('/users', {
+    search: debounced || undefined,
+    page,
+    pageSize: 25,
+  });
   const update = useApiMutation(
     ({ id, body }: { id: string; body: unknown }) => api.patch<UserRow>(`/users/${id}`, body),
+    ['/users'],
+  );
+  const remove = useApiMutation(
+    (id: string) => api.delete<{ deleted: 'removed' | 'archived' }>(`/users/${id}`),
     ['/users'],
   );
 
@@ -47,16 +56,30 @@ export default function UsersPage() {
         title={t('nav.users')}
         description={t('users.lead')}
         action={
-          <Button className="gap-2" onClick={() => setCreating((c) => !c)}>
+          <Button
+            className="gap-2"
+            onClick={() => {
+              setEditing(null);
+              setCreating((c) => !c);
+            }}
+          >
             <Plus className="h-5 w-5" />
             {t('users.new')}
           </Button>
         }
       />
 
-      {creating && <NewUserForm onDone={() => setCreating(false)} />}
+      {creating && <UserForm onDone={() => setCreating(false)} />}
+      {editing && <UserForm key={editing.id} user={editing} onDone={() => setEditing(null)} />}
 
-      <SearchField value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder={t('users.search')} />
+      <SearchField
+        value={search}
+        onChange={(v) => {
+          setSearch(v);
+          setPage(1);
+        }}
+        placeholder={t('users.search')}
+      />
 
       {query.isLoading && <LoadingState />}
       {query.isError && <ErrorState error={query.error} onRetry={() => void query.refetch()} />}
@@ -100,31 +123,73 @@ export default function UsersPage() {
                     </Badge>
                   </Td>
                   <Td className="text-muted-foreground">{user.warehouse?.name ?? t('users.all')}</Td>
-                  <Td className="text-muted-foreground">
-                    {user.lastLoginAt ? dateTime(user.lastLoginAt) : '—'}
-                  </Td>
+                  <Td className="text-muted-foreground">{user.lastLoginAt ? dateTime(user.lastLoginAt) : '—'}</Td>
                   <Td className="text-end">
-                    {user.id !== me?.id && (
+                    <div className="flex justify-end gap-1.5">
                       <Button
                         variant="outline"
                         size="sm"
-                        className={user.isActive ? 'text-muted-foreground hover:border-destructive/50 hover:text-destructive' : undefined}
-                        disabled={update.isPending}
-                        onClick={() =>
-                          (!user.isActive || window.confirm(`${t('users.deactivate')} — ${user.name}?`)) &&
-                          update.mutate(
-                            { id: user.id, body: { isActive: !user.isActive } },
-                            {
-                              onSuccess: () =>
-                                toast.push('success', user.isActive ? t('users.deactivated') : t('users.activated')),
-                              onError: (error) => toast.push('error', error.message),
-                            },
-                          )
-                        }
+                        aria-label={t('users.edit')}
+                        title={t('users.edit')}
+                        onClick={() => {
+                          setCreating(false);
+                          setEditing(user);
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
                       >
-                        {user.isActive ? t('users.deactivate') : t('users.activate')}
+                        <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                    )}
+                      {user.id !== me?.id && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className={
+                            user.isActive
+                              ? 'text-muted-foreground hover:border-destructive/50 hover:text-destructive'
+                              : undefined
+                          }
+                          disabled={update.isPending}
+                          onClick={() =>
+                            (!user.isActive || window.confirm(`${t('users.deactivate')} — ${user.name}?`)) &&
+                            update.mutate(
+                              {
+                                id: user.id,
+                                body: { isActive: !user.isActive },
+                              },
+                              {
+                                onSuccess: () =>
+                                  toast.push('success', user.isActive ? t('users.deactivated') : t('users.activated')),
+                                onError: (error) => toast.push('error', error.message),
+                              },
+                            )
+                          }
+                        >
+                          {user.isActive ? t('users.deactivate') : t('users.activate')}
+                        </Button>
+                      )}
+                      {user.id !== me?.id && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          aria-label={t('users.delete')}
+                          className="text-destructive hover:border-destructive/50"
+                          disabled={remove.isPending}
+                          onClick={() =>
+                            window.confirm(t('users.deleteConfirm', { name: user.name })) &&
+                            remove.mutate(user.id, {
+                              onSuccess: (r) =>
+                                toast.push(
+                                  'success',
+                                  r.deleted === 'archived' ? t('users.archived') : t('users.deleted'),
+                                ),
+                              onError: (error) => toast.push('error', error.message),
+                            })
+                          }
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
                   </Td>
                 </Tr>
               ))}
@@ -145,31 +210,37 @@ const initials = (name: string) =>
     .map((part) => part[0]!.toUpperCase())
     .join('');
 
-function NewUserForm({ onDone }: { onDone: () => void }) {
+/** Creates a user, or edits one when `user` is given (blank password = keep it). */
+function UserForm({ user, onDone }: { user?: UserRow; onDone: () => void }) {
   const { t } = useI18n();
+  const me = useAuth((s) => s.user);
+  const editingSelf = user?.id === me?.id;
   const toast = useToast();
   const warehouses = useApiQuery<{ id: string; name: string }[]>('/warehouses');
   const costCenters = useApiQuery<{ id: string; name: string }[]>('/cost-centers');
 
   const [form, setForm] = useState({
-    name: '',
-    email: '',
+    name: user?.name ?? '',
+    email: user?.email ?? '',
     password: '',
-    role: 'WAREHOUSE_USER',
-    warehouseId: '',
-    costCenterId: '',
+    role: user?.role ?? 'WAREHOUSE_USER',
+    warehouseId: user?.warehouse?.id ?? '',
+    costCenterId: user?.costCenter?.id ?? '',
   });
 
-  const create = useApiMutation((body: unknown) => api.post('/users', body), ['/users']);
+  const create = useApiMutation(
+    (body: unknown) => (user ? api.patch(`/users/${user.id}`, body) : api.post('/users', body)),
+    ['/users'],
+  );
 
   const needsWarehouse = form.role === 'WAREHOUSE_USER';
-  const ready =
-    form.name && form.email && form.password.length >= 10 && (!needsWarehouse || form.warehouseId);
+  const passwordOk = user ? form.password === '' || form.password.length >= 10 : form.password.length >= 10;
+  const ready = form.name && form.email && passwordOk && (!needsWarehouse || form.warehouseId);
 
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">{t('users.new')}</CardTitle>
+        <CardTitle className="text-base">{user ? t('users.editTitle', { name: user.name }) : t('users.new')}</CardTitle>
       </CardHeader>
       <CardContent>
         <form
@@ -180,14 +251,14 @@ function NewUserForm({ onDone }: { onDone: () => void }) {
               {
                 name: form.name,
                 email: form.email,
-                password: form.password,
-                role: form.role,
-                warehouseId: form.warehouseId || undefined,
-                costCenterId: form.costCenterId || undefined,
+                ...(form.password ? { password: form.password } : {}),
+                ...(editingSelf ? {} : { role: form.role }),
+                warehouseId: form.warehouseId || (user ? null : undefined),
+                costCenterId: form.costCenterId || (user ? null : undefined),
               },
               {
                 onSuccess: () => {
-                  toast.push('success', t('users.created'));
+                  toast.push('success', user ? t('users.saved') : t('users.created'));
                   onDone();
                 },
                 onError: (error) => toast.push('error', error.message),
@@ -197,7 +268,12 @@ function NewUserForm({ onDone }: { onDone: () => void }) {
         >
           <div className="space-y-1.5">
             <Label htmlFor="u-name">{t('users.name')}</Label>
-            <Input id="u-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+            <Input
+              id="u-name"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              required
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="u-email">{t('users.email')}</Label>
@@ -210,20 +286,29 @@ function NewUserForm({ onDone }: { onDone: () => void }) {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="u-password">{t('users.tempPassword')}</Label>
+            <Label htmlFor="u-password">{user ? t('users.newPassword') : t('users.tempPassword')}</Label>
             <Input
               id="u-password"
               type="text"
+              autoComplete="new-password"
               minLength={10}
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
-              required
+              required={!user}
+              placeholder={user ? t('users.keepPassword') : undefined}
             />
-            <p className="text-xs text-muted-foreground">{t('users.passwordHint')}</p>
+            <p className="text-xs text-muted-foreground">
+              {user ? t('users.newPasswordHint') : t('users.passwordHint')}
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="u-role">{t('users.role')}</Label>
-            <Select id="u-role" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+            <Select
+              id="u-role"
+              value={form.role}
+              disabled={editingSelf}
+              onChange={(e) => setForm({ ...form, role: e.target.value })}
+            >
               <option value="WAREHOUSE_USER">{t('users.roleWarehouseDesc')}</option>
               <option value="ADMIN">{t('users.roleAdminDesc')}</option>
             </Select>
@@ -270,7 +355,7 @@ function NewUserForm({ onDone }: { onDone: () => void }) {
           </div>
           <div className="flex gap-2 sm:col-span-2">
             <Button type="submit" disabled={!ready || create.isPending}>
-              {create.isPending ? t('common.creating') : t('users.create')}
+              {create.isPending ? t('common.saving') : user ? t('users.save') : t('users.create')}
             </Button>
             <Button type="button" variant="ghost" onClick={onDone}>
               {t('common.cancel')}

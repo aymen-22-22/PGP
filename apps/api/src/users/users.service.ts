@@ -31,6 +31,7 @@ export class UsersService {
 
   async list(query: QueryUsersDto) {
     const where: Prisma.UserWhereInput = {
+      deletedAt: null,
       ...(query.role ? { role: query.role } : {}),
       ...(query.warehouseId ? { warehouseId: query.warehouseId } : {}),
       ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
@@ -138,6 +139,53 @@ export class UsersService {
       },
     });
     return user;
+  }
+
+  /**
+   * Removes a user. Someone who never signed in is deleted outright; anyone
+   * with history is archived instead — signed out, unable to sign in, gone
+   * from the list, their email freed for reuse — so "received by Sara" on a
+   * past transfer still says Sara.
+   */
+  async remove(actor: RequestUser, id: string): Promise<{ deleted: 'removed' | 'archived' }> {
+    if (actor.id === id) {
+      throw new BusinessError(ErrorCode.VALIDATION_FAILED, 'You cannot delete your own account.');
+    }
+    const existing = await this.prisma.user.findUnique({ where: { id } });
+    if (!existing || existing.deletedAt) throw BusinessError.notFound('User', id);
+
+    if (existing.role === Role.ADMIN) {
+      const admins = await this.prisma.user.count({ where: { role: Role.ADMIN, isActive: true, deletedAt: null } });
+      if (admins <= 1 && existing.isActive) {
+        throw new BusinessError(ErrorCode.VALIDATION_FAILED, 'This is the last administrator; it cannot be deleted.');
+      }
+    }
+
+    const hasHistory =
+      existing.lastLoginAt !== null || (await this.prisma.auditLog.count({ where: { userId: id } })) > 0;
+
+    if (hasHistory) {
+      await this.prisma.user.update({
+        where: { id },
+        data: {
+          deletedAt: new Date(),
+          isActive: false,
+          email: `deleted-${id}@deleted.invalid`,
+          tokenVersion: { increment: 1 },
+        },
+      });
+    } else {
+      await this.prisma.user.delete({ where: { id } });
+    }
+
+    await this.audit.log({
+      userId: actor.id,
+      action: AuditAction.DELETE_USER,
+      entityType: 'User',
+      entityId: id,
+      metadata: { name: existing.name, email: existing.email, mode: hasHistory ? 'archived' : 'removed' },
+    });
+    return { deleted: hasHistory ? 'archived' : 'removed' };
   }
 
   /** A warehouse user without a warehouse could see nothing — and would be a silent bug. */

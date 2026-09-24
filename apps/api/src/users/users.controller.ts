@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AdminOnly } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -38,5 +38,11 @@ export class UsersController {
     @Body() dto: UpdateUserDto,
   ) {
     return this.users.update(actor, id, dto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete a user (archived instead when they have history)' })
+  remove(@CurrentUser() actor: RequestUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.users.remove(actor, id);
   }
 }
