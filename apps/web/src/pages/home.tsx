@@ -17,7 +17,6 @@ import {
 import { Fragment, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Stat, StatGrid } from '@/components/ui/stat';
 import { ErrorState, LoadingState } from '@/components/ui/states';
 import { TableWrap, Td, Th, Tr } from '@/components/ui/table';
 import type { Dashboard } from '@phone-erp/shared-types';
@@ -25,7 +24,7 @@ import { useI18n } from '@/i18n/provider';
 import { useApiQuery } from '@/hooks/use-api';
 import { isAdmin, useAuth } from '@/lib/auth';
 import { countryFromWarehouseCode, countryName, flagOf, groupByCountry } from '@/lib/countries';
-import { cn, formatNumber, plural } from '@/lib/utils';
+import { cn, formatNumber } from '@/lib/utils';
 
 type WarehouseRow = Dashboard['byWarehouse'][number];
 
@@ -33,7 +32,7 @@ export default function HomePage() {
   const user = useAuth((s) => s.user);
   const admin = isAdmin(user);
 
-  const { t, money, locale, date } = useI18n();
+  const { t, money, locale, date, n } = useI18n();
   const query = useApiQuery<Dashboard>('/reports/dashboard', { enabled: admin });
   const ledger = (name: string) => `/ledger/${name}`;
 
@@ -62,7 +61,7 @@ export default function HomePage() {
           </p>
         </div>
         <Button asChild size="lg" className="gap-2 lg:hidden">
-          <Link to="/scan">
+          <Link to="/scanner">
             <ScanLine className="h-5 w-5" />
             {t('home.scanCta')}
           </Link>
@@ -73,42 +72,30 @@ export default function HomePage() {
 
       {empty && admin && <GetStarted />}
 
-      <StatGrid>
-        {/* These open the existing lists rather than new ones: the records
-            behind a count of devices are the devices themselves. */}
-        <Stat
-          label={t('home.available')}
-          value={totals.available}
-          tone="success"
-          icon={Package}
-          sub={t('home.availableSub')}
-          to="/stock?status=IN_STOCK"
-        />
-        <Stat
-          label={t('home.sold')}
-          value={totals.sold}
-          tone="default"
-          icon={ShoppingBag}
-          sub={plural(financials.completedSales, 'order')}
-          to="/sales"
-        />
-        <Stat
-          label={t('home.send')}
-          value={movement.outgoing}
-          tone="warning"
-          icon={Truck}
-          sub={t('home.sendSub')}
-          to="/send"
-        />
-        <Stat
-          label={t('home.receive')}
-          value={movement.pendingReceipts}
-          tone="warning"
-          icon={ArrowDownToLine}
-          sub={t('home.receiveSub')}
-          to="/receive"
-        />
-      </StatGrid>
+      {/* The four numbers an admin opens the app for, big enough to read at a glance. */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {(
+          [
+            ['/purchases', ArrowDownToLine, 'bg-blue-600', movement.incoming, t('home.card.incoming')],
+            ['/stock', Package, 'bg-emerald-600', totals.available, t('home.card.inStock')],
+            ['/transfers', Truck, 'bg-orange-500', movement.inTransit, t('home.card.inTransit')],
+            ['/sales', ShoppingBag, 'bg-violet-600', data.today.sales, t('home.card.salesToday')],
+          ] as const
+        ).map(([to, Icon, bg, value, label]) => (
+          <Link
+            key={to}
+            to={to}
+            className={`${bg} flex flex-col gap-2 rounded-2xl p-4 text-white shadow-sm transition active:scale-[0.98] hover:brightness-110`}
+          >
+            <Icon className="h-6 w-6 opacity-90" aria-hidden />
+            <span className="tabular text-4xl font-black leading-none">{n(value)}</span>
+            <span className="text-sm font-semibold opacity-90">{label}</span>
+            {to === '/sales' && (
+              <span className="tabular text-xs opacity-80">{money(data.today.revenue, financials.currency, { round: true })}</span>
+            )}
+          </Link>
+        ))}
+      </div>
 
       {admin && (
         <div className="grid gap-4 lg:grid-cols-5">

@@ -1,6 +1,6 @@
 import { Banknote, FileText, Minus, Plus, Receipt, Trash2, TrendingUp } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { BackButton } from '@/components/page';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -109,7 +109,11 @@ export default function PosPage() {
   });
   // Opens on the till last used here, else the admin's own warehouse, so a
   // sale can start with a scan instead of a dropdown. Still changeable above.
+  // Opened from the scanner's "Vendre": that warehouse's till, that phone in the basket.
+  const [params] = useSearchParams();
   const [storedTill, setTillIdState] = useState(() => {
+    const fromScanner = params.get('wh');
+    if (fromScanner) return fromScanner;
     try {
       return localStorage.getItem(TILL_KEY) ?? user?.warehouseId ?? '';
     } catch {
@@ -206,6 +210,16 @@ export default function PosPage() {
       setRejected(t('pos.offline'));
     }
   };
+
+  const prefilled = useRef(false);
+  useEffect(() => {
+    const code = params.get('code');
+    if (!code || prefilled.current) return;
+    if (admin && (!warehouses.data || !tillId)) return;
+    prefilled.current = true;
+    void scan(code);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [admin, tillId, warehouses.data]);
 
   const sell = useApiMutation(
     (body: unknown) => api.post<Record<string, unknown>>('/pos/sales', body),

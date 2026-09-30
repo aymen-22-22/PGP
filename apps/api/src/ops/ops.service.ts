@@ -13,6 +13,15 @@ import { TransfersService } from '../transfers/transfers.service';
 /** How long a receipt can be taken back from the scanner's result screen. */
 const UNDO_WINDOW_MS = 60_000;
 
+/** Office-only figures shown to admins after a scan. */
+interface OfficeDetails {
+  cost: string | null;
+  costCurrency: string | null;
+  salePrice: string;
+  saleCurrency: string;
+  purchase: { id: string; number: string } | null;
+}
+
 type ProductCard = { id: string; name: string; imageUrl: string | null };
 
 /**
@@ -210,6 +219,62 @@ export class OpsService {
       return { status: 'PENDING_CHECK', code: found.code, product, where: device.currentWarehouse?.name ?? null };
     }
     return { status: 'UNAVAILABLE', code: found.code, product, where: device.currentWarehouse?.name ?? null };
+  }
+
+  /**
+   * The scan, plus what only the office sees: what the phone cost, what it
+   * sells for, and the purchase order it came on. Warehouse accounts get the
+   * plain answer.
+   */
+  async scanWithOffice(user: RequestUser, code: string, requested?: string) {
+    const outcome = await this.scan(user, code, requested);
+    if (user.role !== Role.ADMIN || outcome.status === 'NOT_FOUND') return outcome;
+    return { ...outcome, office: await this.officeDetails(outcome.code) };
+  }
+
+  private async officeDetails(code: string): Promise<OfficeDetails | null> {
+    const label = await this.prisma.purchaseUnitLabel.findUnique({
+      where: { code },
+      select: {
+        deviceId: true,
+        purchaseItem: {
+          select: {
+            unitPrice: true,
+            purchase: { select: { id: true, number: true, currency: true } },
+            product: { select: { defaultSalePrice: true, currency: true } },
+          },
+        },
+      },
+    });
+    if (label && !label.deviceId) {
+      const { unitPrice, purchase, product } = label.purchaseItem;
+      return {
+        cost: unitPrice.toString(),
+        costCurrency: purchase.currency,
+        salePrice: product.defaultSalePrice.toString(),
+        saleCurrency: product.currency,
+        purchase: { id: purchase.id, number: purchase.number },
+      };
+    }
+    const found = await this.scans.resolveOne(code);
+    if (!found) return null;
+    const device = await this.prisma.device.findUnique({
+      where: { id: found.device.id },
+      select: {
+        landedCost: true,
+        costCurrency: true,
+        purchase: { select: { id: true, number: true } },
+        product: { select: { defaultSalePrice: true, currency: true } },
+      },
+    });
+    if (!device) return null;
+    return {
+      cost: device.landedCost?.toString() ?? null,
+      costCurrency: device.costCurrency ?? null,
+      salePrice: device.product.defaultSalePrice.toString(),
+      saleCurrency: device.product.currency,
+      purchase: device.purchase,
+    };
   }
 
   /** "Recevoir": books in the scanned unit, whether it came on a purchase or a transfer. */

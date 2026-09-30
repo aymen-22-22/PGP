@@ -1,8 +1,8 @@
-import { ArrowDownToLine, Camera, Check, HelpCircle, ImageIcon, Package, Printer, RotateCcw, SendHorizontal, Truck, Undo2, X } from 'lucide-react';
+import { ArrowDownToLine, Banknote, Camera, Check, HelpCircle, History, ImageIcon, Package, Printer, RotateCcw, SendHorizontal, Truck, Undo2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Label, Select } from '@/components/ui/input';
+import { Select } from '@/components/ui/input';
 import { ErrorState, LoadingState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
 import { CameraScanner } from '@/features/scanner/camera-scanner';
@@ -12,6 +12,7 @@ import { useApiQuery } from '@/hooks/use-api';
 import { useI18n } from '@/i18n/provider';
 import { api } from '@/lib/api';
 import { isAdmin, useAuth } from '@/lib/auth';
+import { countryFromWarehouseCode, flagOf } from '@/lib/countries';
 import { cn } from '@/lib/utils';
 
 interface ProductCard {
@@ -23,6 +24,15 @@ interface ProductCard {
 interface Incoming {
   total: number;
   items: { product: ProductCard; toReceive: number; inStock: number; purchaseIds: string[] }[];
+}
+
+/** Office-only figures, sent to admins. */
+interface Office {
+  cost: string | null;
+  costCurrency: string | null;
+  salePrice: string;
+  saleCurrency: string;
+  purchase: { id: string; number: string } | null;
 }
 
 type Outcome =
@@ -83,14 +93,30 @@ const write = (key: string, value: string) => {
  * with a big coloured answer you can read from a metre away.
  */
 export default function ScannerPage() {
-  const { t } = useI18n();
+  const { t, money } = useI18n();
+  const describeOffice = (o: Office) =>
+    [
+      o.cost ? `${t('ops.cost')} ${money(o.cost, o.costCurrency ?? undefined)}` : null,
+      `${t('ops.price')} ${money(o.salePrice, o.saleCurrency)}`,
+      o.purchase?.number,
+    ]
+      .filter(Boolean)
+      .join(' · ');
   const toast = useToast();
   const navigate = useNavigate();
   const user = useAuth((s) => s.user);
   const admin = isAdmin(user);
 
   const [warehouseId, setWarehouseId] = useState(() => read(WAREHOUSE_KEY));
-  const warehouses = useApiQuery<{ id: string; name: string }[]>('/warehouses', { enabled: admin });
+  const warehouses = useApiQuery<{ id: string; name: string; code: string; countryRef?: { code: string } | null }[]>(
+    '/warehouses',
+    { enabled: admin },
+  );
+  // Nothing chosen yet: start on the first warehouse rather than an empty page.
+  useEffect(() => {
+    const first = warehouses.data?.[0];
+    if (admin && !warehouseId && first) setWarehouseId(first.id);
+  }, [admin, warehouseId, warehouses.data]);
   const sourceId = admin ? warehouseId : (user?.warehouseId ?? '');
   const ready = !!sourceId;
   const scope = admin && warehouseId ? { warehouseId } : {};
@@ -113,7 +139,13 @@ export default function ScannerPage() {
   const markHandled = (code: string) => handledAt.current.set(code.toUpperCase(), Date.now());
   // Undo lives in its own bar under the answer, not on it: tapping the big
   // screen to close it must never take a receipt back.
-  const [undo, setUndo] = useState<{ run: () => void; product?: ProductCard } | null>(null);
+  const [undo, setUndo] = useState<{
+    run?: () => void;
+    product?: ProductCard;
+    code?: string;
+    /** Admin only: the phone is on the shelf here and can be sold. */
+    sellable?: boolean;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [sendLines, setSendLines] = useState<SendLine[]>([]);
   const [destinations, setDestinations] = useState<{ id: string; name: string }[]>([]);
@@ -156,7 +188,9 @@ export default function ScannerPage() {
     }
     setBusy(true);
     try {
-      const result = await api.post<Outcome>('/ops/scan', { code, ...scope });
+      const result = await api.post<Outcome & { office?: Office | null }>('/ops/scan', { code, ...scope });
+      // Admins see what it cost, what it sells for, which order it came on.
+      const officeLine = result.status !== 'NOT_FOUND' && result.office ? describeOffice(result.office) : undefined;
 
       if (result.status === 'INCOMING') {
         // Received on the spot: no button to press.
@@ -171,13 +205,17 @@ export default function ScannerPage() {
           code: result.code,
           title: t('ops.flash.received'),
           product: done.product,
-          detail: t('ops.left', { count: done.remaining }),
+          detail: [t('ops.left', { count: done.remaining }), officeLine].filter(Boolean).join(' · '),
         });
         setUndo(
-          done.undoable
+          done.undoable || admin
             ? {
                 product: done.product,
-                run: () =>
+                code: result.code,
+                sellable: admin,
+                run: !done.undoable
+                  ? undefined
+                  : () =>
                   void api
                     .post('/ops/undo-receive', { code: result.code })
                     .then(() => {
@@ -194,9 +232,11 @@ export default function ScannerPage() {
         setSendLines((lines) => [{ code: result.code, product: result.product }, ...lines]);
         setDestinations(result.destinations);
         markHandled(result.code);
-        setFlash({ tone: 'send', code: result.code, title: t('ops.flash.send'), product: result.product });
+        setFlash({ tone: 'send', code: result.code, title: t('ops.flash.send'), product: result.product, detail: officeLine });
         setUndo({
           product: result.product,
+          code: result.code,
+          sellable: admin,
           run: () => setSendLines((lines) => lines.filter((l) => l.code !== result.code)),
         });
       } else {
@@ -205,8 +245,9 @@ export default function ScannerPage() {
           tone: 'problem',
           title: t(`ops.status.${result.status}`),
           product: 'product' in result ? result.product : undefined,
-          detail: 'where' in result && result.where ? result.where : code,
+          detail: ['where' in result && result.where ? result.where : code, officeLine].filter(Boolean).join(' · '),
         });
+        if (admin && result.status !== 'NOT_FOUND') setUndo({ product: result.product, code: result.code });
       }
     } catch (error) {
       scanFeedback('rejected');
@@ -254,24 +295,32 @@ export default function ScannerPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-5">
       {admin && (
-        <div className="space-y-1.5">
-          <Label htmlFor="ops-wh">{t('common.warehouse')}</Label>
-          <Select
-            id="ops-wh"
-            value={warehouseId}
-            onChange={(e) => {
-              setWarehouseId(e.target.value);
-              setSendLines([]);
-              write(WAREHOUSE_KEY, e.target.value);
-            }}
-          >
-            <option value="">{t('common.choose')}</option>
-            {warehouses.data?.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name}
-              </option>
-            ))}
-          </Select>
+        // One tap per warehouse: an admin scans as whichever one they stand in.
+        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" role="radiogroup" aria-label={t('common.warehouse')}>
+          {warehouses.data?.map((w) => (
+            <button
+              key={w.id}
+              type="button"
+              role="radio"
+              aria-checked={warehouseId === w.id}
+              ref={(el) => {
+                // Keep the chosen warehouse in view in a long row of chips.
+                if (el && warehouseId === w.id) el.scrollIntoView({ block: 'nearest', inline: 'center' });
+              }}
+              onClick={() => {
+                setWarehouseId(w.id);
+                setSendLines([]);
+                write(WAREHOUSE_KEY, w.id);
+              }}
+              className={cn(
+                'flex h-11 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition',
+                warehouseId === w.id ? 'border-primary bg-primary text-primary-foreground' : 'bg-card',
+              )}
+            >
+              <span aria-hidden>{flagOf(w.countryRef?.code ?? countryFromWarehouseCode(w.code))}</span>
+              {w.name}
+            </button>
+          ))}
         </div>
       )}
 
@@ -411,17 +460,46 @@ export default function ScannerPage() {
           <div className="flex w-full max-w-md items-center gap-3 rounded-2xl bg-foreground p-2 text-background shadow-xl">
             {undo.product && <Thumb product={undo.product} size="sm" />}
             <span className="min-w-0 flex-1 truncate text-sm">{undo.product?.name}</span>
-            <Button
-              variant="secondary"
-              className="h-11 gap-2"
-              onClick={() => {
-                undo.run();
-                setUndo(null);
-              }}
-            >
-              <Undo2 className="h-5 w-5" />
-              {t('ops.undo')}
-            </Button>
+            {admin && undo.sellable && undo.code && (
+              <Button
+                variant="secondary"
+                size="icon"
+                className="h-11 w-11"
+                aria-label={t('ops.sell')}
+                title={t('ops.sell')}
+                onClick={() => {
+                  setSendLines((lines) => lines.filter((l) => l.code !== undo.code));
+                  navigate(`/pos?code=${encodeURIComponent(undo.code!)}&wh=${sourceId}`);
+                }}
+              >
+                <Banknote className="h-5 w-5" />
+              </Button>
+            )}
+            {admin && undo.code && (
+              <Button
+                variant="secondary"
+                size="icon"
+                className="h-11 w-11"
+                aria-label={t('ops.history')}
+                title={t('ops.history')}
+                onClick={() => navigate(`/imei/${encodeURIComponent(undo.code!)}`)}
+              >
+                <History className="h-5 w-5" />
+              </Button>
+            )}
+            {undo.run && (
+              <Button
+                variant="secondary"
+                className="h-11 gap-2"
+                onClick={() => {
+                  undo.run!();
+                  setUndo(null);
+                }}
+              >
+                <Undo2 className="h-5 w-5" />
+                {t('ops.undo')}
+              </Button>
+            )}
             <Button
               size="icon"
               variant="ghost"

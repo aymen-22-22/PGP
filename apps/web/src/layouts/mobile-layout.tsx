@@ -6,8 +6,6 @@ import {
   Package,
   ScanLine,
   Settings,
-  ShoppingCart,
-  Truck,
 } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { isAdmin, useAuth } from '@/lib/auth';
@@ -36,11 +34,11 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
-  { to: '/purchases', label: 'nav.purchases', icon: ShoppingCart },
-  { to: '/sales', label: 'nav.sales', icon: BarChart3 },
-  { to: '/scan', label: 'nav.scan', icon: ScanLine, centre: true },
-  { to: '/transfers', label: 'nav.transfers', icon: Truck },
+  { to: '/', label: 'nav.home', icon: Home, end: true },
   { to: '/stock', label: 'nav.stock', icon: Package },
+  { to: '/scanner', label: 'nav.scanner', icon: ScanLine, centre: true },
+  { to: '/sales', label: 'nav.sales', icon: BarChart3 },
+  { to: '/more', label: 'nav.more', icon: MoreHorizontal },
 ];
 
 /**

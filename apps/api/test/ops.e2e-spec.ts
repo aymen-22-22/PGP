@@ -44,6 +44,9 @@ describe('Warehouse operations: scan, receive, send', () => {
     const after = await as(app, admin).get(`/api/v1/ops/incoming?warehouseId=${central}`).expect(200);
     expect(after.body.items[0]).toMatchObject({ toReceive: 9, inStock: 1 });
 
+    expect(scanned.body.office).toMatchObject({ purchase: { id: fixture.purchase.id } });
+    expect(scanned.body.office.salePrice).toBeTruthy();
+
     const again = await as(app, admin).post('/api/v1/ops/scan').send({ code: label.code, warehouseId: central }).expect(200);
     expect(again.body.status).toBe('AVAILABLE');
     expect(again.body.destinations.map((d: { id: string }) => d.id)).not.toContain(central);
@@ -65,6 +68,8 @@ describe('Warehouse operations: scan, receive, send', () => {
     expect(incoming.body.total).toBe(1);
     const scan = await as(app, jean).post('/api/v1/ops/scan').send({ code: label.code }).expect(200);
     expect(scan.body).toMatchObject({ status: 'INCOMING', source: 'TRANSFER' });
+    // Prices are office information: a warehouse account never gets them.
+    expect(scan.body.office).toBeUndefined();
     await as(app, jean).post('/api/v1/ops/receive').send({ code: label.code }).expect(200);
     expect((await as(app, jean).get('/api/v1/ops/incoming').expect(200)).body.total).toBe(0);
   });
