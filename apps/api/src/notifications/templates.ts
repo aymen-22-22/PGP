@@ -1,4 +1,5 @@
 import type { NotificationEvent } from '@prisma/client';
+import { translator, type MailLang } from './i18n';
 
 /**
  * The messages themselves.
@@ -16,6 +17,8 @@ export interface LineItem {
   quantity: number;
   /** Present for phones; accessories have no unit to name. */
   detail?: string | null;
+  /** Absolute URL of the product photo; left out when there is none. */
+  imageUrl?: string | null;
 }
 
 export interface MessageFacts {
@@ -145,7 +148,9 @@ const escape = (value: string): string =>
 /** How many product lines to print before summarising the rest. */
 const MAX_LINES = 25;
 
-export function renderMessage(facts: MessageFacts): { html: string; text: string } {
+export function renderMessage(facts: MessageFacts, lang: MailLang = 'en'): { html: string; text: string } {
+  const t = translator(lang);
+  const dir = lang === 'ar' ? 'rtl' : 'ltr';
   const shown = facts.lines.slice(0, MAX_LINES);
   const hidden = facts.lines.length - shown.length;
   const totalUnits = facts.lines.reduce((sum, l) => sum + l.quantity, 0);
@@ -168,10 +173,18 @@ export function renderMessage(facts: MessageFacts): { html: string; text: string
     `<tr>${factCells[i * 2]}${factCells[i * 2 + 1] ?? '<td width="50%"></td>'}</tr>`,
   ).join('');
 
+  const anyImage = shown.some((l) => l.imageUrl);
   const lineRows = shown
     .map(
       (l) => `
         <tr>
+          ${
+            l.imageUrl
+              ? `<td width="56" style="padding:8px 0 8px 12px;border-bottom:1px solid ${RULE};"><img src="${escape(l.imageUrl)}" width="48" height="48" alt="" style="display:block;width:48px;height:48px;object-fit:cover;border-radius:8px;border:1px solid ${RULE};"></td>`
+              : anyImage
+                ? `<td width="56" style="padding:8px 0 8px 12px;border-bottom:1px solid ${RULE};"><div style="width:48px;height:48px;border-radius:8px;background:${soft};"></div></td>`
+                : ''
+          }
           <td style="padding:10px 12px;border-bottom:1px solid ${RULE};">
             <div style="font-size:14px;font-weight:600;color:${INK};">${escape(l.product)}</div>
             <div style="font-size:12px;color:${MUTED};font-family:monospace;margin-top:2px;">${escape(l.sku)}${l.detail ? ` &middot; ${escape(l.detail)}` : ''}</div>
@@ -196,9 +209,9 @@ export function renderMessage(facts: MessageFacts): { html: string; text: string
     .join(' · ');
 
   const html = `<!doctype html>
-<html>
+<html lang="${lang}" dir="${dir}">
 <head><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"></head>
-<body style="margin:0;padding:24px 12px;background:#eef1f6;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<body dir="${dir}" style="margin:0;padding:24px 12px;background:#eef1f6;text-align:${dir === 'rtl' ? 'right' : 'left'};font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
   <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escape(preheader)}</div>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;margin:0 auto;">
     <tr><td style="padding:0 4px 12px;">
@@ -211,7 +224,7 @@ export function renderMessage(facts: MessageFacts): { html: string; text: string
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid ${RULE};border-radius:14px;overflow:hidden;box-shadow:0 4px 18px rgba(15,23,42,.06);">
     <tr>
       <td bgcolor="${accent}" style="padding:26px 24px 22px;background:${accent};background-image:linear-gradient(135deg,${accent} 0%,${INK} 140%);">
-        ${area ? `<div style="display:inline-block;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#ffffff;background:rgba(255,255,255,.18);padding:4px 10px;border-radius:999px;">${area.icon}&nbsp; ${area.label}</div>` : ''}
+        ${area ? `<div style="display:inline-block;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#ffffff;background:rgba(255,255,255,.18);padding:4px 10px;border-radius:999px;">${area.icon}&nbsp; ${t(`area.${facts.journey!.area}`)}</div>` : ''}
         <div style="font-size:24px;font-weight:800;color:#ffffff;line-height:1.25;margin-top:12px;">${escape(facts.headline)}</div>
         <div style="margin-top:10px;"><span style="display:inline-block;font-size:13px;font-weight:700;color:${accent};background:#ffffff;font-family:monospace;padding:5px 10px;border-radius:6px;">${escape(facts.reference)}</span></div>
       </td>
@@ -226,30 +239,30 @@ export function renderMessage(facts: MessageFacts): { html: string; text: string
     }
     <tr><td style="padding:16px 20px 0;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-        ${tile(totalUnits.toLocaleString('en-GB'), totalUnits === 1 ? 'unit' : 'units')}
-        ${tile(facts.lines.length.toLocaleString('en-GB'), facts.lines.length === 1 ? 'product' : 'products')}
+        ${tile(totalUnits.toLocaleString('en-GB'), t('tile.unit', { n: totalUnits }))}
+        ${tile(facts.lines.length.toLocaleString('en-GB'), t('tile.product', { n: facts.lines.length }))}
       </tr></table>
     </td></tr>
     ${factRows ? `<tr><td style="padding:4px 20px 0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${factRows}</table></td></tr>` : ''}
     <tr>
       <td style="padding:16px 24px 4px;">
-        <div style="font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:${MUTED};padding:0 0 6px;">What's inside</div>
+        <div style="font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:${MUTED};padding:0 0 6px;">${t('inside')}</div>
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:1px solid ${RULE};border-radius:8px;">
           ${lineRows}
         </table>
-        ${hidden > 0 ? `<div style="font-size:12px;color:${MUTED};padding:8px 2px;">and ${hidden} more line${hidden === 1 ? '' : 's'} — open it in the app to see them all.</div>` : ''}
+        ${hidden > 0 ? `<div style="font-size:12px;color:${MUTED};padding:8px 2px;">${t('moreLines', { n: hidden })}</div>` : ''}
       </td>
     </tr>
     ${
       facts.link
         ? `<tr><td align="center" style="padding:20px 24px 26px;">
-             <a href="${escape(facts.link)}" style="display:inline-block;background:${accent};color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 28px;border-radius:10px;">${escape(facts.linkLabel ?? 'Open in the app')} &rarr;</a>
+             <a href="${escape(facts.link)}" style="display:inline-block;background:${accent};color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 28px;border-radius:10px;">${escape(facts.linkLabel ?? t('link.default'))} ${lang === 'ar' ? '&larr;' : '&rarr;'}</a>
            </td></tr>`
         : '<tr><td style="padding:8px;"></td></tr>'
     }
     <tr>
       <td style="padding:14px 24px;background:#f8fafc;border-top:1px solid ${RULE};font-size:11px;color:${MUTED};text-align:center;">
-        Sent automatically when this happened. Turn these off under More → your account.
+        ${t('footer')}
       </td>
     </tr>
   </table>
@@ -271,26 +284,18 @@ export function renderMessage(facts: MessageFacts): { html: string; text: string
     ...facts.facts.map((f) => `${f.label}: ${f.value}`),
     '',
     ...shown.map((l) => `  ${String(l.quantity).padStart(5)}  ${l.product} (${l.sku})${l.detail ? ` — ${l.detail}` : ''}`),
-    ...(hidden > 0 ? [`  … and ${hidden} more line${hidden === 1 ? '' : 's'}`] : []),
+    ...(hidden > 0 ? [`  … ${t('moreLines', { n: hidden })}`] : []),
     '',
-    `Total units: ${totalUnits.toLocaleString('en-GB')}`,
+    `${t('totalUnits')}: ${totalUnits.toLocaleString('en-GB')}`,
     ...(facts.link ? ['', facts.link] : []),
     '',
-    'Sent automatically when this happened. Turn these off under More → your account.',
+    t('footer'),
   ].join('\n');
 
   return { html, text };
 }
 
 /** The subject line, which is most of what gets read. */
-export function subjectFor(event: NotificationEvent, reference: string, warehouse: string): string {
-  const titles: Record<NotificationEvent, string> = {
-    PURCHASE_ORDERED: 'Goods on the way',
-    PURCHASE_RECEIVED: 'Goods received',
-    SHORT_DELIVERY: 'Short delivery',
-    RECEIPT_VALIDATED: 'Receipt validated',
-    TRANSFER_SHIPPED: 'Shipment sent',
-    TRANSFER_RECEIVED: 'Shipment received',
-  };
-  return `${titles[event]} · ${reference} · ${warehouse}`;
+export function subjectFor(event: NotificationEvent, reference: string, warehouse: string, lang: MailLang = 'en'): string {
+  return `${translator(lang)(`subject.${event}`)} · ${reference} · ${warehouse}`;
 }

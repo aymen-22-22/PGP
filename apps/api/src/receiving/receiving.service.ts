@@ -149,7 +149,7 @@ export class ReceivingService {
     });
     const products = await this.prisma.product.findMany({
       where: { id: { in: byProduct.map((g) => g.productId) } },
-      select: { id: true, name: true, sku: true },
+      select: { id: true, name: true, sku: true, imageUrl: true },
     });
     const productById = new Map(products.map((p) => [p.id, p]));
 
@@ -160,33 +160,33 @@ export class ReceivingService {
       destinationWarehouseId: receipt.warehouseId,
       referenceType: 'Receipt',
       referenceId: id,
-      facts: {
-        headline: `${released} phone${released === 1 ? '' : 's'} ready to sell in ${receipt.warehouse.name}`,
+      path: '/receipts',
+      facts: (t, fmt) => ({
+        headline: t('head.validated', { n: released, wh: receipt.warehouse.name }),
         journey: {
           area: 'buying',
           steps: [
-            { label: 'Arrived', state: 'done', note: receipt.createdBy?.name ?? null },
-            { label: 'Checked', state: 'done', note: user.name },
-            { label: 'In stock', state: 'done', note: receipt.warehouse.name },
+            { label: t('step.arrived'), state: 'done', note: receipt.createdBy?.name ?? null },
+            { label: t('step.checked'), state: 'done', note: user.name },
+            { label: t('step.inStock'), state: 'done', note: receipt.warehouse.name },
           ],
         },
         facts: [
-          { label: 'Receipt', value: receipt.number },
-          { label: 'Warehouse', value: receipt.warehouse.name },
-          ...(receipt.createdBy ? [{ label: 'Received by', value: receipt.createdBy.name }] : []),
-          { label: 'Validated by', value: user.name },
-          { label: 'Validated at', value: new Date().toLocaleString('en-GB') },
-          { label: 'Units released', value: `${released}` },
+          { label: t('fact.receipt'), value: receipt.number },
+          { label: t('fact.warehouse'), value: receipt.warehouse.name },
+          ...(receipt.createdBy ? [{ label: t('fact.receivedBy'), value: receipt.createdBy.name }] : []),
+          { label: t('fact.validatedBy'), value: user.name },
+          { label: t('fact.validatedAt'), value: fmt.dateTime(new Date()) },
+          { label: t('fact.unitsReleased'), value: `${released}` },
         ],
         lines: byProduct.flatMap((group) => {
           const product = productById.get(group.productId);
           return product
-            ? [{ product: product.name, sku: product.sku, quantity: group._count._all }]
+            ? [{ product: product.name, sku: product.sku, quantity: group._count._all, imageUrl: product.imageUrl }]
             : [];
         }),
-        link: `${this.config.frontendUrl}/receipts`,
-        linkLabel: 'Open receipts',
-      },
+        linkLabel: t('link.receipts'),
+      }),
     });
 
     await this.audit.log({

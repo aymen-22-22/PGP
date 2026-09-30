@@ -209,7 +209,7 @@ export class PurchasesService {
       include: {
         supplier: { select: { name: true } },
         warehouse: { select: { name: true, code: true } },
-        items: { include: { product: { select: { name: true, sku: true } } } },
+        items: { include: { product: { select: { name: true, sku: true, imageUrl: true } } } },
       },
     });
     if (!purchase) return;
@@ -221,32 +221,37 @@ export class PurchasesService {
       destinationWarehouseId: purchase.warehouseId,
       referenceType: 'Purchase',
       referenceId: purchase.id,
-      facts: {
-        headline: `${units} unit${units === 1 ? '' : 's'} on the way to ${purchase.warehouse.name}`,
+      path: `/purchases/${purchase.id}`,
+      facts: (t, fmt) => ({
+        headline: t('head.ordered', { n: units, wh: purchase.warehouse.name }),
         journey: {
           area: 'buying',
           from: { name: purchase.supplier.name },
           to: { name: purchase.warehouse.name, code: purchase.warehouse.code },
           progress: 0,
           steps: [
-            { label: 'Ordered', state: 'done', note: purchase.number },
-            { label: 'Arrived', state: 'current', note: 'Scan it in when it lands' },
-            { label: 'Checked', state: 'todo' },
-            { label: 'In stock', state: 'todo', note: purchase.warehouse.name },
+            { label: t('step.ordered'), state: 'done', note: purchase.number },
+            { label: t('step.arrived'), state: 'current', note: t('note.scanWhenLands') },
+            { label: t('step.checked'), state: 'todo' },
+            { label: t('step.inStock'), state: 'todo', note: purchase.warehouse.name },
           ],
         },
         facts: [
-          { label: 'Purchase', value: purchase.number },
-          { label: 'Supplier', value: purchase.supplier.name },
-          { label: 'Coming to', value: purchase.warehouse.name },
-          { label: 'Ordered by', value: user.name },
-          { label: 'Ordered on', value: purchase.purchaseDate.toLocaleDateString('en-GB') },
-          { label: 'Expected', value: `${units} units` },
+          { label: t('fact.purchase'), value: purchase.number },
+          { label: t('fact.supplier'), value: purchase.supplier.name },
+          { label: t('fact.comingTo'), value: purchase.warehouse.name },
+          { label: t('fact.orderedBy'), value: user.name },
+          { label: t('fact.orderedOn'), value: fmt.date(purchase.purchaseDate) },
+          { label: t('fact.expected'), value: t('units', { n: units }) },
         ],
-        lines: purchase.items.map((i) => ({ product: i.product.name, sku: i.product.sku, quantity: i.quantity })),
-        link: `${this.config.frontendUrl}/purchases/${purchase.id}`,
-        linkLabel: 'Open the purchase',
-      },
+        lines: purchase.items.map((i) => ({
+          product: i.product.name,
+          sku: i.product.sku,
+          quantity: i.quantity,
+          imageUrl: i.product.imageUrl,
+        })),
+        linkLabel: t('link.purchase'),
+      }),
     });
   }
 
@@ -259,7 +264,7 @@ export class PurchasesService {
     const purchase = await this.prisma.purchase.findUnique({
       where: { id: purchaseId },
       include: {
-        items: { include: { product: { select: { id: true, name: true, sku: true, tracking: true } } } },
+        items: { include: { product: { select: { id: true, name: true, sku: true, tracking: true, imageUrl: true } } } },
         // For the notification: who sent the goods, and where they landed.
         supplier: { select: { name: true } },
         warehouse: { select: { name: true, code: true } },
@@ -569,6 +574,7 @@ export class PurchasesService {
     const warehouseName = purchase.warehouse.name;
     const supplierName = purchase.supplier.name;
     const productSkus = new Map(purchase.items.map((i) => [i.productId, i.product.sku]));
+    const productImages = new Map(purchase.items.map((i) => [i.productId, i.product.imageUrl]));
     await this.notifications.notify({
       event: missing > 0 ? 'SHORT_DELIVERY' : 'PURCHASE_RECEIVED',
       reference: result.receipt.number,
@@ -576,54 +582,50 @@ export class PurchasesService {
       destinationWarehouseId: purchase.warehouseId,
       referenceType: 'Purchase',
       referenceId: purchase.id,
-      facts: {
-        headline: missing > 0 ? `Part of the order arrived in ${warehouseName}` : `Arrived in ${warehouseName}`,
+      path: `/purchases/${purchase.id}`,
+      facts: (t, fmt) => ({
+        headline: missing > 0 ? t('head.partArrived', { wh: warehouseName }) : t('head.arrived', { wh: warehouseName }),
         journey: {
           area: 'buying',
           from: { name: supplierName },
           to: { name: warehouseName, code: purchase.warehouse.code },
           progress: expectedTotal ? receivedTotal / expectedTotal : 1,
           steps: [
-            { label: 'Ordered', state: 'done', note: purchase.number },
+            { label: t('step.ordered'), state: 'done', note: purchase.number },
             {
-              label: 'Arrived',
+              label: t('step.arrived'),
               state: missing > 0 ? 'current' : 'done',
-              note: `${receivedTotal} of ${expectedTotal}`,
+              note: t('note.xOfY', { a: receivedTotal, b: expectedTotal }),
             },
-            { label: 'Checked', state: requiresValidation ? 'current' : 'done' },
-            { label: 'In stock', state: requiresValidation ? 'todo' : 'done', note: warehouseName },
+            { label: t('step.checked'), state: requiresValidation ? 'current' : 'done' },
+            { label: t('step.inStock'), state: requiresValidation ? 'todo' : 'done', note: warehouseName },
           ],
         },
         facts: [
-          { label: 'Purchase', value: purchase.number },
-          { label: 'Supplier', value: supplierName },
-          { label: 'Warehouse', value: warehouseName },
-          { label: 'Received by', value: user.name },
-          { label: 'Received at', value: now.toLocaleString('en-GB') },
-          { label: 'Expected', value: `${expectedTotal} units` },
-          { label: 'Received', value: `${receivedTotal} units` },
-          ...(requiresValidation
-            ? [{ label: 'Status', value: 'Awaiting validation before it can be sold' }]
-            : []),
+          { label: t('fact.purchase'), value: purchase.number },
+          { label: t('fact.supplier'), value: supplierName },
+          { label: t('fact.warehouse'), value: warehouseName },
+          { label: t('fact.receivedBy'), value: user.name },
+          { label: t('fact.receivedAt'), value: fmt.dateTime(now) },
+          { label: t('fact.expected'), value: t('units', { n: expectedTotal }) },
+          { label: t('fact.received'), value: t('units', { n: receivedTotal }) },
+          ...(requiresValidation ? [{ label: t('fact.status'), value: t('value.awaitingValidation') }] : []),
         ],
-        alert:
-          missing > 0
-            ? `${missing} unit${missing === 1 ? '' : 's'} short of what was ordered. The rest of the line stays open.`
-            : null,
+        alert: missing > 0 ? t('alert.short', { n: missing }) : null,
         lines: perLine.map((line) => ({
           product: line.productName,
           sku: productSkus.get(line.productId) ?? '',
           quantity: line.quantity,
+          imageUrl: productImages.get(line.productId) ?? null,
           detail:
             line.imeis.length === 1
               ? line.imeis[0]
               : line.imeis.length > 1
-                ? `${line.imeis.length} IMEIs scanned`
-                : 'counted by quantity',
+                ? t('value.imeisScanned', { n: line.imeis.length })
+                : t('value.countedByQuantity'),
         })),
-        link: `${this.config.frontendUrl}/purchases/${purchase.id}`,
-        linkLabel: 'Open this purchase',
-      },
+        linkLabel: t('link.purchase'),
+      }),
     });
 
     await this.audit.log({

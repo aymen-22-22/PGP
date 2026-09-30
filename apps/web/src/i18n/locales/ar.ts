@@ -213,6 +213,8 @@ const ar: Record<string, string> = {
   'users.deleteConfirm': 'حذف {name}؟ لن يتمكن من تسجيل الدخول بعد الآن، ويبقى اسمه على ما قام به سابقاً.',
   'users.deleted': 'تم حذف المستخدم',
   'users.archived': 'تم حذف المستخدم — يبقى اسمه في السجلات السابقة',
+  'company.appUrl': 'عنوان التطبيق',
+  'company.appUrlHint': 'العنوان الذي يُفتح منه التطبيق. يُستعمل لأزرار وصور المنتجات في الرسائل.',
   'nav.section.overview': 'نظرة عامة',
   'nav.section.inbound': 'الوارد',
   'nav.section.distribution': 'التوزيع',
