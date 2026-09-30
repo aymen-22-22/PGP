@@ -3,6 +3,8 @@ import { NotificationEvent, NotificationStatus, Role } from '@prisma/client';
 import { APP_CONFIG } from '../common/tokens';
 import type { AppConfig } from '../config/configuration';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
+import { formatDate, formatDateTime, isMailLang, translator, type MailLang, type Translate } from './i18n';
 import { MailerService } from './mailer.service';
 import { renderMessage, subjectFor, type MessageFacts } from './templates';
 
@@ -36,7 +38,16 @@ export interface NotifyInput {
   sourceWarehouseId?: string | null;
   referenceType?: string;
   referenceId?: string;
-  facts: Omit<MessageFacts, 'headline' | 'reference'> & { headline: string };
+  /** Where the button leads, e.g. "/purchases/<id>"; the site address is added here. */
+  path?: string;
+  /**
+   * Builds the message in one language. Called once per language among the
+   * recipients, so each person reads it in the language they chose in the app.
+   */
+  facts: (t: Translate, fmt: { dateTime: (d: Date) => string; date: (d: Date) => string }) => Omit<
+    MessageFacts,
+    'reference' | 'link'
+  >;
 }
 
 @Injectable()
@@ -51,8 +62,23 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mailer: MailerService,
+    private readonly settings: SettingsService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
+
+  /**
+   * The address people open the app at, for the buttons and photos in emails.
+   * The admin sets it under Settings → Company (it is also filled in the first
+   * time an admin signs in); FRONTEND_URL and CORS_ORIGIN are the fallbacks.
+   */
+  async appUrl(): Promise<string | null> {
+    const company = await this.settings.get<{ appUrl?: string }>('company');
+    const candidates = [company?.appUrl, this.config.frontendUrl, ...this.config.cors.origins];
+    const isLocal = (u: string) => /\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(u);
+    const usable = candidates.filter((u): u is string => !!u && /^https?:\/\//.test(u));
+    const pick = usable.find((u) => !isLocal(u)) ?? usable[0] ?? null;
+    return pick ? pick.replace(/\/+$/, '') : null;
+  }
 
   onModuleInit(): void {
     // Always armed: mail can be switched on from Settings without a restart,
@@ -81,20 +107,42 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       const recipients = await this.recipientsFor(input);
       if (recipients.length === 0) return;
 
-      const { html, text } = renderMessage({ ...input.facts, reference: input.reference });
+      const base = await this.appUrl();
+      const absolute = (url?: string | null) =>
+        !url ? null : /^https?:\/\//.test(url) ? url : base ? `${base}${url.startsWith('/') ? '' : '/'}${url}` : null;
 
-      await this.prisma.notification.create({
-        data: {
-          event: input.event,
-          subject: subjectFor(input.event, input.reference, input.warehouseName),
-          html,
-          text,
-          recipients,
-          referenceType: input.referenceType,
-          referenceId: input.referenceId,
-          warehouseId: input.destinationWarehouseId ?? input.sourceWarehouseId ?? null,
-        },
-      });
+      // One message per language, each to the people who chose it.
+      const byLang = new Map<MailLang, string[]>();
+      for (const r of recipients) {
+        const lang: MailLang = isMailLang(r.language) ? r.language : 'en';
+        byLang.set(lang, [...(byLang.get(lang) ?? []), r.email]);
+      }
+
+      for (const [lang, emails] of byLang) {
+        const t = translator(lang);
+        const built = input.facts(t, { dateTime: (d) => formatDateTime(lang, d), date: (d) => formatDate(lang, d) });
+        const { html, text } = renderMessage(
+          {
+            ...built,
+            reference: input.reference,
+            link: input.path ? absolute(input.path) : null,
+            lines: built.lines.map((l) => ({ ...l, imageUrl: absolute(l.imageUrl) })),
+          },
+          lang,
+        );
+        await this.prisma.notification.create({
+          data: {
+            event: input.event,
+            subject: subjectFor(input.event, input.reference, input.warehouseName, lang),
+            html,
+            text,
+            recipients: emails.sort(),
+            referenceType: input.referenceType,
+            referenceId: input.referenceId,
+            warehouseId: input.destinationWarehouseId ?? input.sourceWarehouseId ?? null,
+          },
+        });
+      }
 
       // Try immediately; the sweep is the safety net, not the normal path.
       // The promise is kept rather than dropped so that settled() can wait for
@@ -190,7 +238,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
    * Someone who leaves the company between the event and a retry should not
    * receive it, and someone who joins should not receive an old one.
    */
-  private async recipientsFor(input: NotifyInput): Promise<string[]> {
+  private async recipientsFor(input: NotifyInput): Promise<{ email: string; language: string | null }[]> {
     const audience = AUDIENCE[input.event];
     const warehouseIds: string[] = [];
     if (audience.warehouses === 'destination' || audience.warehouses === 'both') {
@@ -209,9 +257,10 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
           ...(warehouseIds.length ? [{ warehouseId: { in: warehouseIds } }] : []),
         ],
       },
-      select: { email: true },
+      select: { email: true, language: true },
     });
 
-    return [...new Set(users.map((u) => u.email))].sort();
+    const seen = new Set<string>();
+    return users.filter((u) => !seen.has(u.email) && seen.add(u.email)).sort((a, b) => a.email.localeCompare(b.email));
   }
 }

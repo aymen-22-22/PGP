@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Put } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AdminOnly } from '../common/decorators/roles.decorator';
 import type { RequestUser } from '../common/types';
@@ -14,9 +14,11 @@ export interface CompanySettings {
   taxId: string;
   /** Printed at the bottom of every invoice: bank details, warranty terms… */
   footer: string;
+  /** Where people open the app, e.g. https://pgp.etdledger.com — used for email buttons and photos. */
+  appUrl: string;
 }
 
-const EMPTY: CompanySettings = { name: '', address: '', phone: '', email: '', taxId: '', footer: '' };
+const EMPTY: CompanySettings = { name: '', address: '', phone: '', email: '', taxId: '', footer: '', appUrl: '' };
 
 class CompanyDto implements CompanySettings {
   @IsString() @MinLength(1) @MaxLength(120) name!: string;
@@ -25,6 +27,7 @@ class CompanyDto implements CompanySettings {
   @IsOptional() @IsString() @MaxLength(120) email = '';
   @IsOptional() @IsString() @MaxLength(120) taxId = '';
   @IsOptional() @IsString() @MaxLength(1000) footer = '';
+  @IsOptional() @IsString() @MaxLength(200) @Matches(/^(https?:\/\/[^\s/]+)?\/?$/, { message: 'The app address looks like https://erp.example.com' }) appUrl = '';
 }
 
 /** Who the invoices come from: set once by the admin, printed on every invoice. */
@@ -50,6 +53,7 @@ export class CompanySettingsController {
       email: dto.email.trim(),
       taxId: dto.taxId.trim(),
       footer: dto.footer.trim(),
+      appUrl: dto.appUrl.trim().replace(/\/+$/, ''),
     };
     await this.settings.set('company', value, user.id);
     return value;

@@ -1,4 +1,5 @@
 import { INestApplication } from '@nestjs/common';
+import { SettingsService } from '../src/settings/settings.service';
 import { MailerService } from '../src/notifications/mailer.service';
 import { NotificationsService } from '../src/notifications/notifications.service';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -78,6 +79,36 @@ describe('Notifications', () => {
       expect(message.subject).toMatch(/^Goods on the way · PO-/);
       expect(message.text).toContain('4 units on the way to France Warehouse');
       expect(message.text).toContain('Ordered by: Admin');
+    });
+  });
+
+  describe('language, links and photos', () => {
+    it('writes to each person in their own language, with working links and product photos', async () => {
+      await prisma.user.update({ where: { id: fixture.jean.id }, data: { language: 'fr' } });
+      // Through the service: it caches settings, and a direct write would be missed.
+      await app.get(SettingsService).set('company', { appUrl: 'https://erp.example.com' });
+      await prisma.product.update({
+        where: { id: fixture.product.id },
+        data: { imageUrl: '/api/uploads/products/00000000-0000-0000-0000-000000000001.png' },
+      });
+
+      const po = await as(app, admin)
+        .post('/api/v1/purchases')
+        .send({
+          supplierId: fixture.supplier.id,
+          warehouseId: fixture.france.id,
+          items: [{ productId: fixture.product.id, quantity: 3, unitPrice: '900.00' }],
+        })
+        .expect(201);
+      await notifications.flush();
+
+      const toJean = mailer.sent().find((m) => [m.to].flat().includes(fixture.jean.email))!;
+      expect(toJean.subject).toMatch(/^Marchandise en route · PO-/);
+      expect(toJean.text).toContain('3 unités en route vers France Warehouse');
+      expect(toJean.html).toContain(`href="https://erp.example.com/purchases/${po.body.id}"`);
+      expect(toJean.html).toContain(
+        'src="https://erp.example.com/api/uploads/products/00000000-0000-0000-0000-000000000001.png"',
+      );
     });
   });
 

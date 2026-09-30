@@ -524,7 +524,7 @@ export class TransfersService {
       include: {
         shipment: true,
         _count: { select: { devices: true } },
-        items: { include: { product: { select: { id: true, name: true, sku: true, tracking: true } } } },
+        items: { include: { product: { select: { id: true, name: true, sku: true, tracking: true, imageUrl: true } } } },
         // Named, not just identified: the despatch note says where it is going.
         sourceWarehouse: { select: { name: true, code: true } },
         destinationWarehouse: { select: { name: true, code: true } },
@@ -658,39 +658,40 @@ export class TransfersService {
       destinationWarehouseId: transfer.destinationWarehouseId,
       referenceType: 'Transfer',
       referenceId: transferId,
-      facts: {
-        headline: `On its way to ${transfer.destinationWarehouse.name}`,
+      path: `/transfers/${transferId}`,
+      facts: (t, fmt) => ({
+        headline: t('head.shipped', { wh: transfer.destinationWarehouse.name }),
         journey: {
           area: 'moving',
           from: transfer.sourceWarehouse,
           to: transfer.destinationWarehouse,
           progress: 0.5,
           steps: [
-            { label: 'Prepared', state: 'done', note: transfer.number },
-            { label: 'Loaded', state: 'done', note: `${result.shipped} units` },
-            { label: 'On the way', state: 'current', note: dto.carrier ?? null },
-            { label: 'Arrived', state: 'todo' },
+            { label: t('step.prepared'), state: 'done', note: transfer.number },
+            { label: t('step.loaded'), state: 'done', note: t('units', { n: result.shipped }) },
+            { label: t('step.onTheWay'), state: 'current', note: dto.carrier ?? null },
+            { label: t('step.arrived'), state: 'todo' },
           ],
         },
         facts: [
-          { label: 'Transfer', value: transfer.number },
-          { label: 'From', value: transfer.sourceWarehouse.name },
-          { label: 'To', value: transfer.destinationWarehouse.name },
-          { label: 'Sent by', value: user.name },
-          { label: 'Sent at', value: now.toLocaleString('en-GB') },
-          ...(dto.carrier ? [{ label: 'Carrier', value: dto.carrier }] : []),
-          ...(dto.trackingRef ? [{ label: 'Tracking', value: dto.trackingRef }] : []),
-          { label: 'Units', value: `${result.shipped}` },
+          { label: t('fact.transfer'), value: transfer.number },
+          { label: t('fact.from'), value: transfer.sourceWarehouse.name },
+          { label: t('fact.to'), value: transfer.destinationWarehouse.name },
+          { label: t('fact.sentBy'), value: user.name },
+          { label: t('fact.sentAt'), value: fmt.dateTime(now) },
+          ...(dto.carrier ? [{ label: t('fact.carrier'), value: dto.carrier }] : []),
+          ...(dto.trackingRef ? [{ label: t('fact.tracking'), value: dto.trackingRef }] : []),
+          { label: t('fact.units'), value: `${result.shipped}` },
         ],
         lines: transfer.items.map((item) => ({
           product: item.product.name,
           sku: item.product.sku,
           quantity: item.quantity,
-          detail: item.product.tracking === TrackingMode.BULK ? 'counted by quantity' : null,
+          imageUrl: item.product.imageUrl,
+          detail: item.product.tracking === TrackingMode.BULK ? t('value.countedByQuantity') : null,
         })),
-        link: `${this.config.frontendUrl}/transfers/${transferId}`,
-        linkLabel: 'Open this transfer',
-      },
+        linkLabel: t('link.transfer'),
+      }),
     });
 
     await this.audit.log({
@@ -718,7 +719,7 @@ export class TransfersService {
       where: { id: transferId },
       include: {
         shipment: true,
-        items: { include: { product: { select: { id: true, name: true, sku: true, tracking: true } } } },
+        items: { include: { product: { select: { id: true, name: true, sku: true, tracking: true, imageUrl: true } } } },
         sourceWarehouse: { select: { name: true, code: true } },
         destinationWarehouse: { select: { name: true, code: true } },
       },
@@ -904,51 +905,47 @@ export class TransfersService {
       destinationWarehouseId: transfer.destinationWarehouseId,
       referenceType: 'Transfer',
       referenceId: transferId,
-      facts: {
+      path: `/transfers/${transferId}`,
+      facts: (t, fmt) => ({
         headline: result.complete
-          ? `Arrived at ${transfer.destinationWarehouse.name}`
-          : `Part-arrived at ${transfer.destinationWarehouse.name}`,
+          ? t('head.transferArrived', { wh: transfer.destinationWarehouse.name })
+          : t('head.transferPart', { wh: transfer.destinationWarehouse.name }),
         journey: {
           area: 'moving',
           from: transfer.sourceWarehouse,
           to: transfer.destinationWarehouse,
           progress: result.complete ? 1 : expected ? result.received / expected : 0.5,
           steps: [
-            { label: 'Prepared', state: 'done', note: transfer.number },
-            { label: 'Loaded', state: 'done' },
-            { label: 'On the way', state: 'done' },
+            { label: t('step.prepared'), state: 'done', note: transfer.number },
+            { label: t('step.loaded'), state: 'done' },
+            { label: t('step.onTheWay'), state: 'done' },
             {
-              label: 'Arrived',
+              label: t('step.arrived'),
               state: result.complete ? 'done' : 'current',
-              note: `${result.received} of ${expected}`,
+              note: t('note.xOfY', { a: result.received, b: expected }),
             },
           ],
         },
         facts: [
-          { label: 'Transfer', value: transfer.number },
-          { label: 'From', value: transfer.sourceWarehouse.name },
-          { label: 'To', value: transfer.destinationWarehouse.name },
-          { label: 'Received by', value: user.name },
-          { label: 'Received at', value: now.toLocaleString('en-GB') },
-          { label: 'Expected', value: `${expected} units` },
-          { label: 'Received', value: `${result.received} units` },
-          ...(requiresValidation
-            ? [{ label: 'Status', value: 'Awaiting validation before it can be sold' }]
-            : []),
+          { label: t('fact.transfer'), value: transfer.number },
+          { label: t('fact.from'), value: transfer.sourceWarehouse.name },
+          { label: t('fact.to'), value: transfer.destinationWarehouse.name },
+          { label: t('fact.receivedBy'), value: user.name },
+          { label: t('fact.receivedAt'), value: fmt.dateTime(now) },
+          { label: t('fact.expected'), value: t('units', { n: expected }) },
+          { label: t('fact.received'), value: t('units', { n: result.received }) },
+          ...(requiresValidation ? [{ label: t('fact.status'), value: t('value.awaitingValidation') }] : []),
         ],
-        alert:
-          shortBy > 0
-            ? `${shortBy} unit${shortBy === 1 ? '' : 's'} on this shipment have not arrived. The transfer stays open.`
-            : null,
+        alert: shortBy > 0 ? t('alert.transferShort', { n: shortBy }) : null,
         lines: transfer.items.map((item) => ({
           product: item.product.name,
           sku: item.product.sku,
           quantity: item.quantity,
-          detail: item.product.tracking === TrackingMode.BULK ? 'counted by quantity' : null,
+          imageUrl: item.product.imageUrl,
+          detail: item.product.tracking === TrackingMode.BULK ? t('value.countedByQuantity') : null,
         })),
-        link: `${this.config.frontendUrl}/transfers/${transferId}`,
-        linkLabel: 'Open this transfer',
-      },
+        linkLabel: t('link.transfer'),
+      }),
     });
 
     await this.audit.log({

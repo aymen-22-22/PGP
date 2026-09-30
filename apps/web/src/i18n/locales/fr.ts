@@ -209,6 +209,8 @@ const fr: Record<string, string> = {
   'users.deleteConfirm': 'Supprimer {name} ? La personne ne pourra plus se connecter. Son nom reste sur ce qu’elle a déjà fait.',
   'users.deleted': 'Utilisateur supprimé',
   'users.archived': 'Utilisateur supprimé — son nom reste sur l’historique',
+  'company.appUrl': 'Adresse de l’application',
+  'company.appUrlHint': 'L’adresse où l’on ouvre l’application. Utilisée pour les boutons et les photos des e-mails.',
   'nav.section.overview': 'Vue d’ensemble',
   'nav.section.inbound': 'Entrées',
   'nav.section.distribution': 'Distribution',

@@ -17,9 +17,10 @@ interface Company {
   email: string;
   taxId: string;
   footer: string;
+  appUrl: string;
 }
 
-const EMPTY: Company = { name: '', address: '', phone: '', email: '', taxId: '', footer: '' };
+const EMPTY: Company = { name: '', address: '', phone: '', email: '', taxId: '', footer: '', appUrl: '' };
 
 /** The business details printed at the top and bottom of every invoice. */
 export default function CompanySettingsPage() {
@@ -28,7 +29,8 @@ export default function CompanySettingsPage() {
   const query = useApiQuery<Company>('/settings/company');
   const [form, setForm] = useState<Company>(EMPTY);
   useEffect(() => {
-    if (query.data) setForm(query.data);
+    // Prefill with the address this page is open at: that is the app's address.
+    if (query.data) setForm({ ...EMPTY, ...query.data, appUrl: query.data.appUrl || window.location.origin });
   }, [query.data]);
   const save = useApiMutation(() => api.put<Company>('/settings/company', form), ['/settings/company']);
 
@@ -68,6 +70,16 @@ export default function CompanySettingsPage() {
             </Field>
             <Field id="c-tax" label={t('company.taxId')} className="sm:col-span-2">
               <Input id="c-tax" value={form.taxId} onChange={(e) => set({ taxId: e.target.value })} />
+            </Field>
+            <Field id="c-url" label={t('company.appUrl')} hint={t('company.appUrlHint')} className="sm:col-span-2">
+              <Input
+                id="c-url"
+                type="url"
+                dir="ltr"
+                value={form.appUrl}
+                onChange={(e) => set({ appUrl: e.target.value })}
+                placeholder="https://erp.example.com"
+              />
             </Field>
             <Field id="c-footer" label={t('company.footer')} hint={t('company.footerHint')} className="sm:col-span-2">
               <textarea

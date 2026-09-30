@@ -19,6 +19,7 @@ import { APP_CONFIG } from '../common/tokens';
 import type { RequestUser } from '../common/types';
 import { UpdatePreferencesDto } from '../users/dto/user.dto';
 import { AppConfig } from '../config/configuration';
+import { SettingsService } from '../settings/settings.service';
 import { AuthService } from './auth.service';
 import { ChangePasswordDto, LoginDto } from './dto/auth.dto';
 
@@ -27,6 +28,7 @@ import { ChangePasswordDto, LoginDto } from './dto/auth.dto';
 export class AuthController {
   constructor(
     private readonly auth: AuthService,
+    private readonly settings: SettingsService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -39,6 +41,7 @@ export class AuthController {
   async login(@Body() dto: LoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const result = await this.auth.login(dto.email, dto.password, context(req));
     this.setAuthCookies(res, result.accessToken, result.csrfToken);
+    if (result.user.role === 'ADMIN') await this.rememberAppUrl(req);
     // The token is also returned for non-browser API clients.
     return { user: result.user, accessToken: result.accessToken, csrfToken: result.csrfToken };
   }
@@ -104,6 +107,22 @@ export class AuthController {
     // Readable by JavaScript on purpose: the client echoes it back in the
     // X-CSRF-Token header, which a cross-site attacker cannot do.
     res.cookie(this.config.cookie.csrfName, csrf, { ...this.cookieOptions(), httpOnly: false, maxAge });
+  }
+
+  /**
+   * The first time an admin signs in from a real address, keep it: emails need
+   * it for their buttons and photos, and nobody should have to type it.
+   */
+  private async rememberAppUrl(req: Request): Promise<void> {
+    try {
+      const origin = req.headers.origin;
+      if (typeof origin !== 'string' || !/^https:\/\/[^\s/]+$/.test(origin)) return;
+      const company = (await this.settings.get<Record<string, string>>('company')) ?? {};
+      if (company.appUrl) return;
+      await this.settings.set('company', { ...company, appUrl: origin });
+    } catch {
+      /* a convenience only; sign-in must never fail because of it */
+    }
   }
 }
 

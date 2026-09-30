@@ -213,6 +213,8 @@ const en = {
   'users.deleteConfirm': 'Delete {name}? They will no longer be able to sign in. Their name stays on what they already did.',
   'users.deleted': 'User deleted',
   'users.archived': 'User deleted — their name is kept on past records',
+  'company.appUrl': 'App address',
+  'company.appUrlHint': 'Where people open the app. Used for the buttons and product photos in emails.',
   'nav.section.overview': 'Overview',
   'nav.section.inbound': 'Inbound',
   'nav.section.distribution': 'Distribution',
