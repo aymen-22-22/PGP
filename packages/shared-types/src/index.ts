@@ -4,3 +4,4 @@ export * from './api';
 export * from './dto';
 export * from './imei';
 export * from './money';
+export * from './routes';

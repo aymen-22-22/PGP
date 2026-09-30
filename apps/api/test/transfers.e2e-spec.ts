@@ -46,6 +46,26 @@ describe('Transfers and shipments (spec §12–§14)', () => {
     expect(res.body.shipment.status).toBe('PREPARING');
   });
 
+  it('only allows France → Spain and Spain → Algeria', async () => {
+    const [paris, madrid, algiers] = await Promise.all(
+      [
+        ['Paris', 'FR-01'],
+        ['Madrid', 'ES-01'],
+        ['Algiers', 'DZ-01'],
+      ].map(([name, code]) => prisma.warehouse.create({ data: { name, code, country: name } })),
+    );
+    const send = (from: string, to: string) =>
+      as(app, admin)
+        .post('/api/v1/transfers')
+        .send({ sourceWarehouseId: from, destinationWarehouseId: to, items: [{ productId: fixture.product.id, quantity: 1 }] });
+
+    await send(paris.id, madrid.id).expect(201);
+    await send(madrid.id, algiers.id).expect(201);
+    await send(paris.id, algiers.id).expect(400);
+    await send(madrid.id, paris.id).expect(400);
+    await send(algiers.id, madrid.id).expect(400);
+  });
+
   it('refuses a transfer to the same warehouse', async () => {
     await as(app, admin)
       .post('/api/v1/transfers')

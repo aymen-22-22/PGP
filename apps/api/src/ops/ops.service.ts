@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DeviceStatus, PurchaseStatus, Role, TransferStatus } from '@prisma/client';
-import { ErrorCode } from '@phone-erp/shared-types';
+import { ErrorCode, canSendBetween } from '@phone-erp/shared-types';
 import { BusinessError } from '../common/errors/business.error';
 import { DeviceScanService } from '../common/services/device-scan.service';
 import { WarehouseAccessService } from '../common/services/warehouse-access.service';
@@ -177,11 +177,18 @@ export class OpsService {
       return { status: 'OTHER_WAREHOUSE', code: found.code, product, where: device.currentWarehouse?.name ?? null };
     }
     if (device.status === DeviceStatus.IN_STOCK) {
-      const destinations = await this.prisma.warehouse.findMany({
-        where: { isActive: true, id: { not: warehouseId } },
-        select: { id: true, name: true, code: true },
-        orderBy: { name: 'asc' },
-      });
+      const [here, others] = await Promise.all([
+        this.prisma.warehouse.findUnique({ where: { id: warehouseId }, select: { code: true, countryRef: { select: { code: true } } } }),
+        this.prisma.warehouse.findMany({
+          where: { isActive: true, id: { not: warehouseId } },
+          select: { id: true, name: true, code: true, countryRef: { select: { code: true } } },
+          orderBy: { name: 'asc' },
+        }),
+      ]);
+      // Only where this warehouse is allowed to send (France → Spain → Algeria).
+      const destinations = here
+        ? others.filter((w) => canSendBetween(here, w)).map(({ id, name, code }) => ({ id, name, code }))
+        : [];
       return { status: 'AVAILABLE', code: found.code, product, warehouse: device.currentWarehouse?.name ?? '', destinations };
     }
     if (device.status === DeviceStatus.SOLD) return { status: 'SOLD', code: found.code, product, where: null };
