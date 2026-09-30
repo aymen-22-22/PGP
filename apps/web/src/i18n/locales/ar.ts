@@ -251,6 +251,8 @@ const ar: Record<string, string> = {
   'ops.left_other': 'المتبقي {count}',
   'ops.flash.removed': 'تمت الإزالة',
   'ops.undo': 'تراجع',
+  'ops.inStock_one': 'في المخزون: {count}',
+  'ops.inStock_other': 'في المخزون: {count}',
   'nav.section.overview': 'نظرة عامة',
   'nav.section.inbound': 'الوارد',
   'nav.section.distribution': 'التوزيع',

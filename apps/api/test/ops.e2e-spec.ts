@@ -41,6 +41,9 @@ describe('Warehouse operations: scan, receive, send', () => {
     const received = await as(app, admin).post('/api/v1/ops/receive').send({ code: label.code, warehouseId: central }).expect(200);
     expect(received.body.remaining).toBe(9);
 
+    const after = await as(app, admin).get(`/api/v1/ops/incoming?warehouseId=${central}`).expect(200);
+    expect(after.body.items[0]).toMatchObject({ toReceive: 9, inStock: 1 });
+
     const again = await as(app, admin).post('/api/v1/ops/scan').send({ code: label.code, warehouseId: central }).expect(200);
     expect(again.body.status).toBe('AVAILABLE');
     expect(again.body.destinations.map((d: { id: string }) => d.id)).not.toContain(central);

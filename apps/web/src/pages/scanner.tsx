@@ -1,4 +1,4 @@
-import { Camera, Check, HelpCircle, ImageIcon, Printer, RotateCcw, SendHorizontal, Truck, Undo2, X } from 'lucide-react';
+import { ArrowDownToLine, Camera, Check, HelpCircle, ImageIcon, Package, Printer, RotateCcw, SendHorizontal, Truck, Undo2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,7 @@ interface ProductCard {
 
 interface Incoming {
   total: number;
-  items: { product: ProductCard; toReceive: number; purchaseIds: string[] }[];
+  items: { product: ProductCard; toReceive: number; inStock: number; purchaseIds: string[] }[];
 }
 
 type Outcome =
@@ -343,8 +343,19 @@ export default function ScannerPage() {
                       <ImageIcon className="h-10 w-10 text-muted-foreground" />
                     )}
                   </span>
-                  <span className="absolute start-2 top-2 flex h-10 min-w-10 items-center justify-center rounded-full bg-blue-600 px-2 text-xl font-black text-white shadow">
+                  <span
+                    className="absolute start-2 top-2 flex h-9 items-center gap-1 rounded-full bg-blue-600 px-2.5 text-lg font-black text-white shadow"
+                    title={t('ops.toReceive', { count: item.toReceive })}
+                  >
+                    <ArrowDownToLine className="h-4 w-4" strokeWidth={3} aria-hidden />
                     {item.toReceive}
+                  </span>
+                  <span
+                    className="absolute end-2 top-2 flex h-9 items-center gap-1 rounded-full bg-emerald-600 px-2.5 text-lg font-black text-white shadow"
+                    title={t('ops.inStock', { count: item.inStock })}
+                  >
+                    <Package className="h-4 w-4" strokeWidth={3} aria-hidden />
+                    {item.inStock}
                   </span>
                   <p className="truncate px-2 pt-1.5 text-xs text-muted-foreground" title={item.product.name}>
                     {item.product.name}
