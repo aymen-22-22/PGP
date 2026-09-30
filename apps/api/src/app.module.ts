@@ -37,6 +37,7 @@ import { SuppliersModule } from './suppliers/suppliers.module';
 import { SettingsModule } from './settings/settings.module';
 import { SystemModule } from './system/system.module';
 import { TransfersModule } from './transfers/transfers.module';
+import { OpsModule } from './ops/ops.module';
 import { UsersModule } from './users/users.module';
 import { WarehousesModule } from './warehouses/warehouses.module';
 import { Reflector } from '@nestjs/core';
@@ -96,6 +97,7 @@ function noStore(_request: Request, response: Response, next: NextFunction): voi
     PricingModule,
     PosModule,
     TransfersModule,
+    OpsModule,
     DeliveryModule,
     SalesModule,
     ReturnsModule,

@@ -1,13 +1,13 @@
 import {
+  Activity,
   Banknote,
   BarChart3,
   Home,
-  Inbox,
   LayoutDashboard,
   MoreHorizontal,
   Package,
   ScanLine,
-  SendHorizontal,
+  Settings,
   ShoppingCart,
   Truck,
 } from 'lucide-react';
@@ -62,11 +62,11 @@ const SELLING_TABS = TABS.map((tab) =>
  * the API refuses a sale from this account anyway.
  */
 const WAREHOUSE_TABS: Tab[] = [
-  { to: '/send', label: 'nav.send', icon: SendHorizontal },
-  { to: '/receive', label: 'nav.receive', icon: Inbox },
-  { to: '/scan', label: 'nav.scan', icon: ScanLine, centre: true },
+  { to: '/', label: 'nav.home', icon: LayoutDashboard, end: true },
   { to: '/stock', label: 'nav.stock', icon: Package },
-  { to: '/', label: 'nav.dashboard', icon: LayoutDashboard, end: true },
+  { to: '/scanner', label: 'nav.scanner', icon: ScanLine, centre: true },
+  { to: '/activity', label: 'nav.activity', icon: Activity },
+  { to: '/more', label: 'nav.settings', icon: Settings },
 ];
 
 export function MobileLayout() {
@@ -87,7 +87,9 @@ export function MobileLayout() {
               bottom slots go to the work itself. */}
           <nav className="flex shrink-0 items-center gap-1" aria-label="Shortcuts">
             {!tabs.some((tab) => tab.to === '/') && <HeaderLink to="/" label={t('nav.home')} icon={Home} end />}
-            <HeaderLink to="/more" label={t('nav.more')} icon={MoreHorizontal} />
+            {!tabs.some((tab) => tab.to === '/more') && (
+              <HeaderLink to="/more" label={t('nav.more')} icon={MoreHorizontal} />
+            )}
           </nav>
         </div>
       </header>

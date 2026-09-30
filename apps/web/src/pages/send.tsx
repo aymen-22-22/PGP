@@ -1,3 +1,4 @@
+import { canSendBetween } from '@phone-erp/shared-types';
 import { ArrowLeft, PackageOpen, SendHorizontal, Truck } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -21,6 +22,7 @@ interface WarehouseOption {
   id: string;
   name: string;
   code: string;
+  countryRef?: { code: string } | null;
 }
 interface ProductOption {
   id: string;
@@ -88,7 +90,13 @@ export default function SendPage() {
   }, ['/transfers', '/inventory', '/reports']);
 
   const destinations = useMemo(
-    () => (warehouses.data ?? []).filter((w) => w.id !== user?.warehouseId),
+    () => {
+      const source = warehouses.data?.find((w) => w.id === user?.warehouseId);
+      // Only where this warehouse may send: France → Spain → Algeria.
+      return (warehouses.data ?? []).filter(
+        (w) => w.id !== user?.warehouseId && (!source || canSendBetween(source, w)),
+      );
+    },
     [warehouses.data, user?.warehouseId],
   );
 

@@ -1,7 +1,7 @@
 import { BarcodeFormat, MultiFormatWriter } from '@zxing/library';
 import { ArrowLeft, FileDown, Printer, Tags } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Label, Select } from '@/components/ui/input';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states';
@@ -92,6 +92,10 @@ export default function PurchaseLabelsPage() {
   const { t } = useI18n();
   const toast = useToast();
   const { id } = useParams<{ id: string }>();
+  const [params] = useSearchParams();
+  // Opened from the scanner: print only that product, and go back to it after.
+  const onlyProduct = params.get('product');
+  const back = params.get('back');
   const user = useAuth((s) => s.user);
   const query = useApiQuery<LabelSheet>(`/purchases/${id}/labels`);
   const [sizeId, setSizeId] = useState<(typeof LABEL_SIZES)[number]['id']>(
@@ -107,7 +111,8 @@ export default function PurchaseLabelsPage() {
   if (query.isLoading) return <LoadingState label={t('labels.loading')} />;
   if (query.isError) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
 
-  const sheet = query.data!;
+  const full = query.data!;
+  const sheet = onlyProduct ? { ...full, data: full.data.filter((l) => l.product.id === onlyProduct) } : full;
 
   const printViaAgent = async () => {
     if (!user?.printerAddress) return;
@@ -124,7 +129,6 @@ export default function PurchaseLabelsPage() {
               product: label.product.name,
               sequence: label.sequence,
               of: label.of,
-              purchaseNumber: sheet.purchase.number,
               size: sizeId,
             }),
           });
@@ -152,7 +156,7 @@ export default function PurchaseLabelsPage() {
           code: label.code,
           name: label.product.name,
           subtitle: [label.product.storage, label.product.color].filter(Boolean).join(' · '),
-          footer: `${label.sequence}/${label.of} · ${sheet.purchase.number}`,
+          footer: `${label.sequence}/${label.of}`,
         })),
         size.width,
         size.height,
@@ -191,9 +195,9 @@ export default function PurchaseLabelsPage() {
     <div className="mx-auto max-w-4xl space-y-5 print:m-0 print:max-w-none print:space-y-0">
       <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
         <Button asChild variant="ghost" size="sm" className="-ms-2 gap-1">
-          <Link to={`/purchases/${id}`}>
-            <ArrowLeft className="h-4 w-4" />
-            {sheet.purchase.number}
+          <Link to={back?.startsWith('/') ? back : `/purchases/${id}`}>
+            <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
+            {back ? t('ops.backToReception') : sheet.purchase.number}
           </Link>
         </Button>
         {sheet.data.length > 0 && (
@@ -284,7 +288,7 @@ export default function PurchaseLabelsPage() {
                       {label.code}
                     </p>
                     <p className="w-full truncate leading-none" style={{ fontSize: mm(size.height * 0.05) }}>
-                      {label.sequence}/{label.of} · {sheet.purchase.number}
+                      {label.sequence}/{label.of}
                     </p>
                   </div>
                 </div>

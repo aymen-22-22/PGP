@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Label, Select } from '@/components/ui/input';
 import { EmptyState, ErrorState, FormError, LoadingState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
-import type { TransferListItem } from '@phone-erp/shared-types';
+import { canSendBetween, type TransferListItem } from '@phone-erp/shared-types';
 import { useApiList, useApiMutation, useApiQuery } from '@/hooks/use-api';
 import { useDebounce } from '@/hooks/use-debounce';
 import { useI18n } from '@/i18n/provider';
@@ -22,6 +22,7 @@ interface WarehouseOption {
   id: string;
   name: string;
   code: string;
+  countryRef?: { code: string } | null;
 }
 interface ProductOption {
   id: string;
@@ -257,7 +258,11 @@ function NewTransferForm({ onDone }: { onDone: () => void }) {
             >
               <option value="">{t('common.choose')}</option>
               {warehouses.data
-                ?.filter((w) => w.id !== sourceWarehouseId)
+                ?.filter((w) => {
+                  const source = warehouses.data?.find((s) => s.id === sourceWarehouseId);
+                  // Only where the source may send: France → Spain → Algeria.
+                  return w.id !== sourceWarehouseId && (!source || canSendBetween(source, w));
+                })
                 .map((w) => (
                   <option key={w.id} value={w.id}>
                     {w.name} ({w.code})

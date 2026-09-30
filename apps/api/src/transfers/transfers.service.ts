@@ -8,12 +8,7 @@ import {
   TrackingMode,
   TransferStatus,
 } from '@prisma/client';
-import {
-  AuditAction,
-  ErrorCode,
-  type Paginated,
-  type TransferListItem,
-} from '@phone-erp/shared-types';
+import { AuditAction, ErrorCode, canSendBetween, type Paginated, type TransferListItem } from '@phone-erp/shared-types';
 import { AuditService } from '../audit/audit.service';
 import { paginate } from '../common/dto/pagination.dto';
 import { BusinessError } from '../common/errors/business.error';
@@ -48,6 +43,9 @@ const EDITABLE: TransferStatus[] = [TransferStatus.DRAFT, TransferStatus.READY];
  * handset ends up promised to two warehouses.
  */
 const CLAIMING: TransferStatus[] = [TransferStatus.DRAFT, TransferStatus.READY, TransferStatus.IN_TRANSIT];
+
+/** What the send-routes rule needs to know about a warehouse. */
+const WAREHOUSE_ROUTE_FIELDS = { id: true, name: true, code: true, countryRef: { select: { code: true } } } as const;
 
 @Injectable()
 export class TransfersService {
@@ -242,11 +240,17 @@ export class TransfersService {
     this.access.assertAccess(user, dto.sourceWarehouseId);
 
     const [source, destination] = await Promise.all([
-      this.prisma.warehouse.findUnique({ where: { id: dto.sourceWarehouseId }, select: { id: true } }),
-      this.prisma.warehouse.findUnique({ where: { id: dto.destinationWarehouseId }, select: { id: true } }),
+      this.prisma.warehouse.findUnique({ where: { id: dto.sourceWarehouseId }, select: WAREHOUSE_ROUTE_FIELDS }),
+      this.prisma.warehouse.findUnique({ where: { id: dto.destinationWarehouseId }, select: WAREHOUSE_ROUTE_FIELDS }),
     ]);
     if (!source) throw BusinessError.notFound('Source warehouse', dto.sourceWarehouseId);
     if (!destination) throw BusinessError.notFound('Destination warehouse', dto.destinationWarehouseId);
+    if (!canSendBetween(source, destination)) {
+      throw new BusinessError(
+        ErrorCode.VALIDATION_FAILED,
+        `${source.name} cannot send to ${destination.name}. France sends to Spain, and Spain sends to Algeria.`,
+      );
+    }
 
     const productIds = dto.items.map((i) => i.productId);
     if (new Set(productIds).size !== productIds.length) {
