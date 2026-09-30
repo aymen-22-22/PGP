@@ -48,8 +48,6 @@ interface Flash {
   title: string;
   product?: ProductCard;
   detail?: string;
-  /** Offered for a few seconds: puts back what the scan just did. */
-  undo?: () => void;
   code?: string;
 }
 
@@ -57,6 +55,9 @@ interface SendLine {
   code: string;
   product: ProductCard;
 }
+
+/** How long a code just handled is taken to be the same box still in view. */
+const REPEAT_MS = 15_000;
 
 const WAREHOUSE_KEY = 'perp_scanner_wh';
 const destinationKey = (sourceId: string) => `perp_scanner_dest:${sourceId}`;
@@ -104,6 +105,15 @@ export default function ScannerPage() {
   // same box still in view, not a second scan.
   const flashRef = useRef<Flash | null>(null);
   flashRef.current = flash;
+  // A box stays in front of the camera for a while after its scan is done.
+  // Reading it again then is not a new scan: without this a received phone
+  // came straight back as "to send", and one on the send list was taken off.
+  const handledAt = useRef(new Map<string, number>());
+  const recentlyHandled = (code: string) => Date.now() - (handledAt.current.get(code.toUpperCase()) ?? 0) < REPEAT_MS;
+  const markHandled = (code: string) => handledAt.current.set(code.toUpperCase(), Date.now());
+  // Undo lives in its own bar under the answer, not on it: tapping the big
+  // screen to close it must never take a receipt back.
+  const [undo, setUndo] = useState<{ run: () => void; product?: ProductCard } | null>(null);
   const [busy, setBusy] = useState(false);
   const [sendLines, setSendLines] = useState<SendLine[]>([]);
   const [destinations, setDestinations] = useState<{ id: string; name: string }[]>([]);
@@ -121,18 +131,26 @@ export default function ScannerPage() {
   // The big answer fades by itself so the next scan can follow straight away.
   useEffect(() => {
     if (!flash) return;
-    const timer = setTimeout(() => setFlash(null), flash.undo ? 5000 : 1800);
+    const timer = setTimeout(() => setFlash(null), 1800);
     return () => clearTimeout(timer);
   }, [flash]);
 
+  useEffect(() => {
+    if (!undo) return;
+    const timer = setTimeout(() => setUndo(null), 8000);
+    return () => clearTimeout(timer);
+  }, [undo]);
+
   const onScan = async (raw: string) => {
     const code = raw.trim();
-    if (!code || busy || flashRef.current?.code?.toUpperCase() === code.toUpperCase()) return;
+    if (!code || busy || flashRef.current?.code?.toUpperCase() === code.toUpperCase() || recentlyHandled(code)) return;
     const already = sendLines.find((l) => l.code.toUpperCase() === code.toUpperCase());
     if (already) {
       // Scanning it again takes it back off the shipment.
       scanFeedback('duplicate');
       setSendLines((lines) => lines.filter((l) => l !== already));
+      markHandled(code);
+      setUndo(null);
       setFlash({ tone: 'duplicate', title: t('ops.flash.removed'), product: already.product, code });
       return;
     }
@@ -147,31 +165,39 @@ export default function ScannerPage() {
           ...scope,
         });
         scanFeedback('accepted');
+        markHandled(result.code);
         setFlash({
           tone: 'received',
           code: result.code,
           title: t('ops.flash.received'),
           product: done.product,
           detail: t('ops.left', { count: done.remaining }),
-          undo: done.undoable
-            ? () =>
-                void api
-                  .post('/ops/undo-receive', { code: result.code })
-                  .then(() => void incoming.refetch())
-                  .catch((error: Error) => toast.push('error', error.message))
-            : undefined,
         });
+        setUndo(
+          done.undoable
+            ? {
+                product: done.product,
+                run: () =>
+                  void api
+                    .post('/ops/undo-receive', { code: result.code })
+                    .then(() => {
+                      handledAt.current.delete(result.code.toUpperCase());
+                      void incoming.refetch();
+                    })
+                    .catch((error: Error) => toast.push('error', error.message)),
+              }
+            : null,
+        );
         void incoming.refetch();
       } else if (result.status === 'AVAILABLE') {
         scanFeedback('accepted');
         setSendLines((lines) => [{ code: result.code, product: result.product }, ...lines]);
         setDestinations(result.destinations);
-        setFlash({
-          tone: 'send',
-          code: result.code,
-          title: t('ops.flash.send'),
+        markHandled(result.code);
+        setFlash({ tone: 'send', code: result.code, title: t('ops.flash.send'), product: result.product });
+        setUndo({
           product: result.product,
-          undo: () => setSendLines((lines) => lines.filter((l) => l.code !== result.code)),
+          run: () => setSendLines((lines) => lines.filter((l) => l.code !== result.code)),
         });
       } else {
         scanFeedback('rejected');
@@ -380,6 +406,35 @@ export default function ScannerPage() {
         </>
       )}
 
+      {undo && !flash && (
+        <div className="fixed inset-x-0 bottom-20 z-40 flex justify-center px-4">
+          <div className="flex w-full max-w-md items-center gap-3 rounded-2xl bg-foreground p-2 text-background shadow-xl">
+            {undo.product && <Thumb product={undo.product} size="sm" />}
+            <span className="min-w-0 flex-1 truncate text-sm">{undo.product?.name}</span>
+            <Button
+              variant="secondary"
+              className="h-11 gap-2"
+              onClick={() => {
+                undo.run();
+                setUndo(null);
+              }}
+            >
+              <Undo2 className="h-5 w-5" />
+              {t('ops.undo')}
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-11 w-11 text-background hover:bg-background/10"
+              aria-label={t('common.close')}
+              onClick={() => setUndo(null)}
+            >
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       {flash && <FlashScreen flash={flash} onClose={() => setFlash(null)} />}
     </div>
   );
@@ -407,7 +462,6 @@ const FLASH_LOOK: Record<Flash['tone'], { bg: string; icon: typeof Check }> = {
 
 /** The answer to a scan, big enough to read from across the bench. Tap to close. */
 function FlashScreen({ flash, onClose }: { flash: Flash; onClose: () => void }) {
-  const { t } = useI18n();
   const look = FLASH_LOOK[flash.tone];
   const Icon = look.icon;
   return (
@@ -431,20 +485,6 @@ function FlashScreen({ flash, onClose }: { flash: Flash; onClose: () => void }) 
         </span>
       )}
       {flash.detail && <p className="text-lg opacity-90">{flash.detail}</p>}
-      {flash.undo && (
-        <button
-          type="button"
-          aria-label={t('ops.undo')}
-          onClick={(e) => {
-            e.stopPropagation();
-            flash.undo!();
-            onClose();
-          }}
-          className="mt-6 flex h-20 w-20 items-center justify-center rounded-full bg-white/25 ring-2 ring-white/70 active:scale-95"
-        >
-          <Undo2 className="h-10 w-10" strokeWidth={3} />
-        </button>
-      )}
     </div>
   );
 }
