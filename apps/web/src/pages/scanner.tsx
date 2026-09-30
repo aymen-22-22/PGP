@@ -251,31 +251,26 @@ export default function ScannerPage() {
 
       {ready && (
         <>
-          {cameraOn ? (
-            <div className="relative">
-              <CameraScanner active tall hideToggle onActiveChange={setCameraOn} onDetect={onDetect} />
+          <CodeScanInput
+            compact
+            camera={false}
+            outcome={null}
+            disabled={busy}
+            onScan={(code) => void onScan(code)}
+            leading={
               <Button
                 size="icon"
-                variant="secondary"
-                className="absolute end-2 top-2 h-11 w-11 rounded-full"
-                aria-label={t('camera.stop')}
-                onClick={() => setCameraOn(false)}
+                variant={cameraOn ? 'secondary' : 'default'}
+                className="h-12 w-12 shrink-0"
+                aria-label={cameraOn ? t('camera.stop') : t('camera.start')}
+                aria-pressed={cameraOn}
+                onClick={() => setCameraOn((on) => !on)}
               >
-                <X className="h-6 w-6" />
+                {cameraOn ? <X className="h-6 w-6" /> : <Camera className="h-6 w-6" />}
               </Button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setCameraOn(true)}
-              aria-label={t('camera.start')}
-              className="flex h-[42vh] min-h-56 w-full flex-col items-center justify-center gap-3 rounded-3xl bg-primary text-primary-foreground shadow-lg transition active:scale-[0.98]"
-            >
-              <Camera className="h-24 w-24" strokeWidth={1.5} />
-              <span className="text-2xl font-black uppercase">{t('nav.scanner')}</span>
-            </button>
-          )}
-          <CodeScanInput compact camera={false} outcome={null} disabled={busy} onScan={(code) => void onScan(code)} />
+            }
+          />
+          {cameraOn && <CameraScanner active hideToggle onActiveChange={setCameraOn} onDetect={onDetect} />}
 
           {sendLines.length > 0 && (
             <section className="space-y-3 rounded-xl border-2 border-orange-300 bg-orange-50/60 p-4 dark:bg-orange-950/20">

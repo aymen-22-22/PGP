@@ -1,5 +1,5 @@
-import { AlertTriangle, Check, CheckCircle2, Keyboard, RotateCcw, Volume2, VolumeX, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { AlertTriangle, ArrowRight, Check, CheckCircle2, Keyboard, RotateCcw, Volume2, VolumeX, X } from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { CameraScanner } from './camera-scanner';
 import { isScanFeedbackMuted, primeScanFeedback, scanFeedback, setScanFeedbackMuted } from './feedback';
 import { useScanGun } from './use-scan-gun';
@@ -23,6 +23,7 @@ export function CodeScanInput({
   disabled,
   camera = true,
   compact = false,
+  leading,
 }: {
   onScan: (code: string) => void;
   outcome: CodeOutcome | null;
@@ -33,6 +34,8 @@ export function CodeScanInput({
   camera?: boolean;
   /** No title, status line, flash or sound caption: the page shows its own result. */
   compact?: boolean;
+  /** Compact only: a button placed at the start of the one-line bar. */
+  leading?: ReactNode;
 }) {
   const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -66,6 +69,62 @@ export function CodeScanInput({
     }, 1200);
     return () => clearInterval(interval);
   }, [autoFocus, disabled]);
+
+  const toggleSound = () => {
+    const next = !mutedUi;
+    setScanFeedbackMuted(next);
+    setMutedUi(next);
+    if (!next) {
+      primeScanFeedback();
+      scanFeedback('accepted');
+    }
+  };
+
+  if (compact) {
+    // One slim bar: [leading] [code field] [→ or sound].
+    return (
+      <div className="flex items-center gap-2 rounded-2xl border bg-card p-2 shadow-sm">
+        {leading}
+        <label htmlFor="code-scan-input" className="sr-only">
+          {label ?? t('receiveScan.input')}
+        </label>
+        <Input
+          id="code-scan-input"
+          ref={inputRef}
+          value={value}
+          disabled={disabled}
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+          enterKeyHint="done"
+          placeholder="UL-2026-000123"
+          className="tabular h-12 min-w-0 flex-1 text-center text-lg font-bold tracking-wider placeholder:font-normal placeholder:text-muted-foreground/40"
+          onChange={(event) => setValue(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              submit(value);
+            }
+          }}
+        />
+        {value.trim() ? (
+          <Button size="icon" className="h-12 w-12 shrink-0" disabled={disabled} aria-label={t('receiveScan.add')} onClick={() => submit(value)}>
+            <ArrowRight className="h-6 w-6 rtl:rotate-180" />
+          </Button>
+        ) : (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-12 w-12 shrink-0"
+            aria-label={mutedUi ? t('scan.soundOff') : t('scan.soundOn')}
+            onClick={toggleSound}
+          >
+            {mutedUi ? <VolumeX className="h-6 w-6" /> : <Volume2 className="h-6 w-6" />}
+          </Button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
@@ -111,15 +170,7 @@ export function CodeScanInput({
 
       <button
         type="button"
-        onClick={() => {
-          const next = !mutedUi;
-          setScanFeedbackMuted(next);
-          setMutedUi(next);
-          if (!next) {
-            primeScanFeedback();
-            scanFeedback('accepted');
-          }
-        }}
+        onClick={toggleSound}
         aria-label={mutedUi ? t('scan.soundOff') : t('scan.soundOn')}
         className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
       >
