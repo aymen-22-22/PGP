@@ -131,7 +131,7 @@ export default function ScannerPage() {
   // The big answer fades by itself so the next scan can follow straight away.
   useEffect(() => {
     if (!flash) return;
-    const timer = setTimeout(() => setFlash(null), 1800);
+    const timer = setTimeout(() => setFlash(null), 1000);
     return () => clearTimeout(timer);
   }, [flash]);
 
