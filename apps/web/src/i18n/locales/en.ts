@@ -251,6 +251,8 @@ const en = {
   'ops.left_other': '{count} left',
   'ops.flash.removed': 'Removed',
   'ops.undo': 'Undo',
+  'ops.inStock_one': '{count} in stock',
+  'ops.inStock_other': '{count} in stock',
   'nav.section.overview': 'Overview',
   'nav.section.inbound': 'Inbound',
   'nav.section.distribution': 'Distribution',

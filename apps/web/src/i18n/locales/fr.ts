@@ -247,6 +247,8 @@ const fr: Record<string, string> = {
   'ops.left_other': 'Reste {count}',
   'ops.flash.removed': 'Retiré',
   'ops.undo': 'Annuler',
+  'ops.inStock_one': 'En stock : {count}',
+  'ops.inStock_other': 'En stock : {count}',
   'nav.section.overview': 'Vue d’ensemble',
   'nav.section.inbound': 'Entrées',
   'nav.section.distribution': 'Distribution',

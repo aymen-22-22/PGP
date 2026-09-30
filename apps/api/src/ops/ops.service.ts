@@ -116,7 +116,16 @@ export class OpsService {
       e.toReceive += open;
       e.fromTransfers += open;
     }
-    const items = [...byProduct.values()].sort((a, b) => b.toReceive - a.toReceive);
+    // What is already on the shelf here, so each card can show both numbers.
+    const shelf = await this.prisma.device.groupBy({
+      by: ['productId'],
+      where: { currentWarehouseId: warehouseId, status: DeviceStatus.IN_STOCK, productId: { in: [...byProduct.keys()] } },
+      _count: { _all: true },
+    });
+    const inStock = new Map(shelf.map((r) => [r.productId, r._count._all]));
+    const items = [...byProduct.values()]
+      .map((e) => ({ ...e, inStock: inStock.get(e.product.id) ?? 0 }))
+      .sort((a, b) => b.toReceive - a.toReceive);
     return { warehouseId, total: items.reduce((s, i) => s + i.toReceive, 0), items };
   }
 
