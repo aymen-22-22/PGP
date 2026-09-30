@@ -7,7 +7,7 @@ import { Input, Label, Select } from '@/components/ui/input';
 import { FormError } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
 import { api } from '@/lib/api';
-import { useAuth } from '@/lib/auth';
+import { isAdmin, useAuth } from '@/lib/auth';
 import { LABEL_SIZES } from '@/lib/label-sizes';
 import { LOCALES, type Locale } from '@/i18n/core';
 import { useI18n, useT } from '@/i18n/provider';
@@ -26,11 +26,13 @@ export default function MorePage() {
   // the header or the bottom bar — listing those twice only adds noise.
   const t = useT();
   const sections = navigationExcluding(user, [...HEADER_LINKS, ...bottomTabsFor(user)]);
+  // A warehouse account sees only its own details and preferences here.
+  const floor = !isAdmin(user);
 
   return (
     <div className="space-y-5">
       <header>
-        <h1 className="text-2xl font-bold tracking-tight">{t('more.title')}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{floor ? t('nav.settings') : t('more.title')}</h1>
       </header>
 
       <Card>
@@ -38,12 +40,12 @@ export default function MorePage() {
           <Row icon={User} label={t('more.signedInAs')} value={user?.name ?? '—'} />
           <Row icon={Building2} label={t('more.email')} value={user?.email ?? '—'} />
           <Row icon={Warehouse} label={t('more.warehouse')} value={user?.warehouseName ?? t('more.allWarehouses')} />
-          <Row icon={FileClock} label={t('more.costCentre')} value={user?.costCenterName ?? '—'} />
+          {!floor && <Row icon={FileClock} label={t('more.costCentre')} value={user?.costCenterName ?? '—'} />}
           <Row icon={KeyRound} label={t('more.role')} value={user?.role === 'ADMIN' ? t('more.role.admin') : t('more.role.user')} />
         </CardContent>
       </Card>
 
-      {sections.map((section) => (
+      {!floor && sections.map((section) => (
         <section key={section.title} className="space-y-2">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t(section.title)}
@@ -67,7 +69,7 @@ export default function MorePage() {
 
       <LanguageChoice />
 
-      <EmailNotifications />
+      {!floor && <EmailNotifications />}
 
       <PrinterSettings />
 

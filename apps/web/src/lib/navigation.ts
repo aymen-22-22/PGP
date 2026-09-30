@@ -96,19 +96,19 @@ export const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
-/** Pages a warehouse user has no business on — the API refuses them anyway. */
-const ADMIN_ONLY_PAGES = ['/suppliers', '/costs', '/prices', '/pos', '/sales'];
+/**
+ * A warehouse account works the floor: scan, receive, send, stock. Everything
+ * else stays with the administrators.
+ */
+const WAREHOUSE_PAGES = ['/', '/stock', '/scanner', '/activity'];
 
 /** The sections this user may actually open, with empty sections dropped. */
 export function navigationFor(user: AuthUser | null): NavSection[] {
   if (isAdmin(user)) return NAV_SECTIONS;
-
-  return NAV_SECTIONS.filter((section) => section.title !== 'nav.section.administration')
-    .map((section) => ({
-      ...section,
-      items: section.items.filter((item) => !ADMIN_ONLY_PAGES.includes(item.to)),
-    }))
-    .filter((section) => section.items.length > 0);
+  return NAV_SECTIONS.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => WAREHOUSE_PAGES.includes(item.to)),
+  })).filter((section) => section.items.length > 0);
 }
 
 /**
@@ -140,6 +140,5 @@ export const sellsAtCounter = (user: AuthUser | null): boolean => user?.countryC
 export const bottomTabsFor = (user: AuthUser | null): string[] =>
   isAdmin(user)
     ? ['/purchases', sellsAtCounter(user) ? '/pos' : '/sales', '/scan', '/transfers', '/stock']
-    : // Stock in and stock out either side of the scanner: a warehouse account
-      // does not buy or sell, so Purchases and Sales are not on its bar at all.
-      ['/send', '/receive', '/scan', '/stock', '/'];
+    : // Home, stock, the scanner in the middle, what happened, and settings.
+      ['/', '/stock', '/scanner', '/activity', '/more'];

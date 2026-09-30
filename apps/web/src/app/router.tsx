@@ -26,6 +26,8 @@ const PurchaseReceiveScanPage = lazy(() => import('@/pages/purchase-receive-scan
 const ReceiptsPage = lazy(() => import('@/pages/receipts'));
 const ReceivePage = lazy(() => import('@/pages/receive'));
 const SendPage = lazy(() => import('@/pages/send'));
+const ScannerPage = lazy(() => import('@/pages/scanner'));
+const ActivityPage = lazy(() => import('@/pages/activity'));
 const SaleInvoicePage = lazy(() => import('@/pages/sale-invoice'));
 const CompanySettingsPage = lazy(() => import('@/pages/company-settings'));
 const TransfersPage = lazy(() => import('@/pages/transfers'));
@@ -120,6 +122,8 @@ export function AppRouter() {
           <Route path="receipts" element={<ReceiptsPage />} />
           <Route path="receive" element={<ReceivePage />} />
           <Route path="send" element={<SendPage />} />
+          <Route path="scanner" element={<ScannerPage />} />
+          <Route path="activity" element={<ActivityPage />} />
 
           <Route path="transfers" element={<TransfersPage />} />
           <Route path="transfers/:id" element={<TransferDetailPage />} />
