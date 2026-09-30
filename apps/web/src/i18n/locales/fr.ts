@@ -245,6 +245,8 @@ const fr: Record<string, string> = {
   'ops.flash.error': 'Erreur',
   'ops.left_one': 'Reste {count}',
   'ops.left_other': 'Reste {count}',
+  'ops.flash.removed': 'Retiré',
+  'ops.undo': 'Annuler',
   'nav.section.overview': 'Vue d’ensemble',
   'nav.section.inbound': 'Entrées',
   'nav.section.distribution': 'Distribution',

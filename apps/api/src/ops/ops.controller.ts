@@ -31,6 +31,13 @@ export class OpsController {
     return this.ops.receive(user, dto.code, dto.warehouseId);
   }
 
+  @Post('undo-receive')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Take back a purchase receipt made by mistake in the last minute' })
+  undoReceive(@CurrentUser() user: RequestUser, @Body() dto: OpsScanDto) {
+    return this.ops.undoReceive(user, dto.code);
+  }
+
   @Post('send')
   @ApiOperation({ summary: 'Send the scanned units to another warehouse (creates and ships a transfer)' })
   send(@CurrentUser() user: RequestUser, @Body() dto: OpsSendDto) {

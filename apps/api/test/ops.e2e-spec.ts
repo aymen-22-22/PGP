@@ -76,4 +76,20 @@ describe('Warehouse operations: scan, receive, send', () => {
     );
     await as(app, carlos).post('/api/v1/ops/receive').send({ code: label.code }).expect(400);
   });
+
+  it('takes back a receipt made by mistake, only by whoever scanned it', async () => {
+    const central = fixture.central.id;
+    const [label] = await labels();
+    const received = await as(app, admin).post('/api/v1/ops/receive').send({ code: label.code, warehouseId: central }).expect(200);
+    expect(received.body.undoable).toBe(true);
+
+    await as(app, jean).post('/api/v1/ops/undo-receive').send({ code: label.code }).expect(400);
+    await as(app, admin).post('/api/v1/ops/undo-receive').send({ code: label.code }).expect(200);
+
+    const scan = await as(app, admin).post('/api/v1/ops/scan').send({ code: label.code, warehouseId: central }).expect(200);
+    expect(scan.body).toMatchObject({ status: 'INCOMING', remaining: 10 });
+    expect(await prisma.device.count()).toBe(0);
+    // Undoing twice is refused rather than going negative.
+    await as(app, admin).post('/api/v1/ops/undo-receive').send({ code: label.code }).expect(400);
+  });
 });

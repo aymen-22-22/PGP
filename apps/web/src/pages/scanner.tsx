@@ -1,10 +1,11 @@
-import { Check, HelpCircle, ImageIcon, Printer, RotateCcw, ScanLine, SendHorizontal, Truck, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Camera, Check, HelpCircle, ImageIcon, Printer, RotateCcw, SendHorizontal, Truck, Undo2, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Label, Select } from '@/components/ui/input';
 import { ErrorState, LoadingState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
+import { CameraScanner } from '@/features/scanner/camera-scanner';
 import { CodeScanInput } from '@/features/scanner/code-scan-input';
 import { scanFeedback } from '@/features/scanner/feedback';
 import { useApiQuery } from '@/hooks/use-api';
@@ -47,6 +48,9 @@ interface Flash {
   title: string;
   product?: ProductCard;
   detail?: string;
+  /** Offered for a few seconds: puts back what the scan just did. */
+  undo?: () => void;
+  code?: string;
 }
 
 interface SendLine {
@@ -95,6 +99,11 @@ export default function ScannerPage() {
   });
 
   const [flash, setFlash] = useState<Flash | null>(null);
+  const [cameraOn, setCameraOn] = useState(false);
+  // The camera keeps reading behind the answer: the same code again is the
+  // same box still in view, not a second scan.
+  const flashRef = useRef<Flash | null>(null);
+  flashRef.current = flash;
   const [busy, setBusy] = useState(false);
   const [sendLines, setSendLines] = useState<SendLine[]>([]);
   const [destinations, setDestinations] = useState<{ id: string; name: string }[]>([]);
@@ -112,16 +121,19 @@ export default function ScannerPage() {
   // The big answer fades by itself so the next scan can follow straight away.
   useEffect(() => {
     if (!flash) return;
-    const timer = setTimeout(() => setFlash(null), 1800);
+    const timer = setTimeout(() => setFlash(null), flash.undo ? 5000 : 1800);
     return () => clearTimeout(timer);
   }, [flash]);
 
   const onScan = async (raw: string) => {
     const code = raw.trim();
-    if (!code || busy) return;
-    if (sendLines.some((l) => l.code.toUpperCase() === code.toUpperCase())) {
+    if (!code || busy || flashRef.current?.code?.toUpperCase() === code.toUpperCase()) return;
+    const already = sendLines.find((l) => l.code.toUpperCase() === code.toUpperCase());
+    if (already) {
+      // Scanning it again takes it back off the shipment.
       scanFeedback('duplicate');
-      setFlash({ tone: 'duplicate', title: t('ops.flash.duplicate'), detail: code });
+      setSendLines((lines) => lines.filter((l) => l !== already));
+      setFlash({ tone: 'duplicate', title: t('ops.flash.removed'), product: already.product, code });
       return;
     }
     setBusy(true);
@@ -130,23 +142,37 @@ export default function ScannerPage() {
 
       if (result.status === 'INCOMING') {
         // Received on the spot: no button to press.
-        const done = await api.post<{ remaining: number; product: ProductCard }>('/ops/receive', {
+        const done = await api.post<{ remaining: number; product: ProductCard; undoable: boolean }>('/ops/receive', {
           code: result.code,
           ...scope,
         });
         scanFeedback('accepted');
         setFlash({
           tone: 'received',
+          code: result.code,
           title: t('ops.flash.received'),
           product: done.product,
           detail: t('ops.left', { count: done.remaining }),
+          undo: done.undoable
+            ? () =>
+                void api
+                  .post('/ops/undo-receive', { code: result.code })
+                  .then(() => void incoming.refetch())
+                  .catch((error: Error) => toast.push('error', error.message))
+            : undefined,
         });
         void incoming.refetch();
       } else if (result.status === 'AVAILABLE') {
         scanFeedback('accepted');
         setSendLines((lines) => [{ code: result.code, product: result.product }, ...lines]);
         setDestinations(result.destinations);
-        setFlash({ tone: 'send', title: t('ops.flash.send'), product: result.product });
+        setFlash({
+          tone: 'send',
+          code: result.code,
+          title: t('ops.flash.send'),
+          product: result.product,
+          undo: () => setSendLines((lines) => lines.filter((l) => l.code !== result.code)),
+        });
       } else {
         scanFeedback('rejected');
         setFlash({
@@ -163,6 +189,10 @@ export default function ScannerPage() {
       setBusy(false);
     }
   };
+
+  const onScanRef = useRef(onScan);
+  onScanRef.current = onScan;
+  const onDetect = useCallback((code: string) => void onScanRef.current(code), []);
 
   const send = async () => {
     if (!destinationId || sendLines.length === 0) return;
@@ -221,9 +251,31 @@ export default function ScannerPage() {
 
       {ready && (
         <>
-          <div className="rounded-xl border bg-card p-4">
-            <CodeScanInput compact outcome={null} disabled={busy} onScan={(code) => void onScan(code)} />
-          </div>
+          {cameraOn ? (
+            <div className="relative">
+              <CameraScanner active tall hideToggle onActiveChange={setCameraOn} onDetect={onDetect} />
+              <Button
+                size="icon"
+                variant="secondary"
+                className="absolute end-2 top-2 h-11 w-11 rounded-full"
+                aria-label={t('camera.stop')}
+                onClick={() => setCameraOn(false)}
+              >
+                <X className="h-6 w-6" />
+              </Button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setCameraOn(true)}
+              aria-label={t('camera.start')}
+              className="flex h-[42vh] min-h-56 w-full flex-col items-center justify-center gap-3 rounded-3xl bg-primary text-primary-foreground shadow-lg transition active:scale-[0.98]"
+            >
+              <Camera className="h-24 w-24" strokeWidth={1.5} />
+              <span className="text-2xl font-black uppercase">{t('nav.scanner')}</span>
+            </button>
+          )}
+          <CodeScanInput compact camera={false} outcome={null} disabled={busy} onScan={(code) => void onScan(code)} />
 
           {sendLines.length > 0 && (
             <section className="space-y-3 rounded-xl border-2 border-orange-300 bg-orange-50/60 p-4 dark:bg-orange-950/20">
@@ -286,25 +338,34 @@ export default function ScannerPage() {
                 {t('ops.nothingIncoming')}
               </p>
             )}
-            <ul className="space-y-2">
+            <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {incoming.data?.items.map((item) => (
-                <li key={item.product.id} className="flex items-center gap-3 rounded-xl border bg-card p-3">
-                  <Thumb product={item.product} />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold leading-tight">{item.product.name}</p>
-                    <p className="text-sm font-bold text-blue-700">{t('ops.toReceive', { count: item.toReceive })}</p>
-                  </div>
-                  {item.purchaseIds.length > 0 && (
+                <li key={item.product.id} className="relative overflow-hidden rounded-2xl border bg-card">
+                  <span className="flex aspect-square items-center justify-center bg-muted">
+                    {item.product.imageUrl ? (
+                      <img src={item.product.imageUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <ImageIcon className="h-10 w-10 text-muted-foreground" />
+                    )}
+                  </span>
+                  <span className="absolute start-2 top-2 flex h-10 min-w-10 items-center justify-center rounded-full bg-blue-600 px-2 text-xl font-black text-white shadow">
+                    {item.toReceive}
+                  </span>
+                  <p className="truncate px-2 pt-1.5 text-xs text-muted-foreground" title={item.product.name}>
+                    {item.product.name}
+                  </p>
+                  {item.purchaseIds.length > 0 ? (
                     <Button
-                      size="icon"
                       variant="outline"
-                      className="h-11 w-11 shrink-0"
+                      className="m-2 mt-1 h-11 w-[calc(100%-1rem)]"
                       aria-label={t('ops.printCodes')}
                       title={t('ops.printCodes')}
                       onClick={() => void printCodes(item)}
                     >
-                      <Printer className="h-5 w-5" />
+                      <Printer className="h-6 w-6" />
                     </Button>
+                  ) : (
+                    <div className="h-2" />
                   )}
                 </li>
               ))}
@@ -340,11 +401,11 @@ const FLASH_LOOK: Record<Flash['tone'], { bg: string; icon: typeof Check }> = {
 
 /** The answer to a scan, big enough to read from across the bench. Tap to close. */
 function FlashScreen({ flash, onClose }: { flash: Flash; onClose: () => void }) {
+  const { t } = useI18n();
   const look = FLASH_LOOK[flash.tone];
   const Icon = look.icon;
   return (
-    <button
-      type="button"
+    <div
       onClick={onClose}
       role="status"
       aria-live="assertive"
@@ -364,7 +425,20 @@ function FlashScreen({ flash, onClose }: { flash: Flash; onClose: () => void }) 
         </span>
       )}
       {flash.detail && <p className="text-lg opacity-90">{flash.detail}</p>}
-      <ScanLine className="mt-6 h-6 w-6 opacity-60" aria-hidden />
-    </button>
+      {flash.undo && (
+        <button
+          type="button"
+          aria-label={t('ops.undo')}
+          onClick={(e) => {
+            e.stopPropagation();
+            flash.undo!();
+            onClose();
+          }}
+          className="mt-6 flex h-20 w-20 items-center justify-center rounded-full bg-white/25 ring-2 ring-white/70 active:scale-95"
+        >
+          <Undo2 className="h-10 w-10" strokeWidth={3} />
+        </button>
+      )}
+    </div>
   );
 }

@@ -249,6 +249,8 @@ const en = {
   'ops.flash.error': 'Error',
   'ops.left_one': '{count} left',
   'ops.left_other': '{count} left',
+  'ops.flash.removed': 'Removed',
+  'ops.undo': 'Undo',
   'nav.section.overview': 'Overview',
   'nav.section.inbound': 'Inbound',
   'nav.section.distribution': 'Distribution',
