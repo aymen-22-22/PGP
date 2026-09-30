@@ -1,12 +1,21 @@
 import {
   Building2,
   Image as ImageIcon,
+  LayoutGrid,
+  List,
+  Printer,
+  X,
   PackageCheck,
   ShoppingCart,
   Truck,
   Undo2,
 } from 'lucide-react';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { CodeSymbol } from '@/components/code-symbol';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/ui/toast';
+import { isLabelSizeId, LABEL_SIZES } from '@/lib/label-sizes';
 import { BackButton } from '@/components/page';
 import { Badge, StatusBadge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,6 +28,8 @@ import { isAdmin, useAuth } from '@/lib/auth';
 import { formatImei } from '@/lib/utils';
 import { STOCK_STATUS } from './stock-products';
 
+
+const SHELF_VIEW_KEY = 'perp_shelf_view';
 
 const MOVEMENT_ICON: Record<string, typeof Truck> = {
   PURCHASE_RECEIPT: PackageCheck,
@@ -58,7 +69,26 @@ export default function StockProduct360Page() {
   const { t, date, dateTime, money, n } = useI18n();
   const { warehouseId, productId } = useParams<{ warehouseId: string; productId: string }>();
   // What a unit cost and what the shelf is worth is office information.
-  const showMoney = isAdmin(useAuth((s) => s.user));
+  const user = useAuth((s) => s.user);
+  const showMoney = isAdmin(user);
+  const toast = useToast();
+  const [view, setView] = useState<'list' | 'tickets'>(() => {
+    try {
+      return localStorage.getItem(SHELF_VIEW_KEY) === 'tickets' ? 'tickets' : 'list';
+    } catch {
+      return 'list';
+    }
+  });
+  const chooseView = (next: 'list' | 'tickets') => {
+    setView(next);
+    try {
+      localStorage.setItem(SHELF_VIEW_KEY, next);
+    } catch {
+      /* this visit only */
+    }
+  };
+  const [bigCode, setBigCode] = useState<string | null>(null);
+  const [printing, setPrinting] = useState(false);
   const query = useApiQuery<Product360>(
     `/stock-explorer/warehouses/${warehouseId}/products/${productId}`,
   );
@@ -69,9 +99,71 @@ export default function StockProduct360Page() {
   const { warehouse, product, stock, sellingPrice, units, purchases, sales, movements } = query.data!;
   const status = STOCK_STATUS[stock.status];
   const serialised = product.tracking === 'SERIALIZED';
+  // Either handle opens the history; a label-received unit has only its printed code.
+  const handleOf = (unit: (typeof units)[number]) => unit.imei ?? unit.label?.code ?? null;
+  const codes = units.map(handleOf).filter((c): c is string => !!c);
+
+  // One label per phone on the shelf, as a PDF at the user's label size: the
+  // one kind of file every phone and printer prints at the right size.
+  const printAll = async () => {
+    const tab = window.open('', '_blank');
+    setPrinting(true);
+    try {
+      const size =
+        LABEL_SIZES.find((s) => user?.printerLabelSize && isLabelSizeId(user.printerLabelSize) && s.id === user.printerLabelSize) ??
+        LABEL_SIZES.find((s) => s.id === '58x40')!;
+      const { buildLabelPdf } = await import('@/lib/label-pdf');
+      const bytes = await buildLabelPdf(
+        codes.map((code, i) => ({
+          code,
+          name: product.name,
+          subtitle: [product.storage, product.color].filter(Boolean).join(' · '),
+          footer: `${i + 1}/${codes.length}`,
+        })),
+        size.width,
+        size.height,
+      );
+      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+      if (tab) tab.location.href = url;
+      else window.location.href = url;
+    } catch (error) {
+      tab?.close();
+      toast.push('error', error instanceof Error ? error.message : String(error));
+    } finally {
+      setPrinting(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-5xl space-y-5">
+      {bigCode && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={bigCode}
+          onClick={() => setBigCode(null)}
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-white p-6 text-black"
+        >
+          <button
+            type="button"
+            aria-label={t('common.close')}
+            onClick={() => setBigCode(null)}
+            className="absolute end-4 top-[max(1rem,env(safe-area-inset-top))] flex h-14 w-14 items-center justify-center rounded-full bg-black/10"
+          >
+            <X className="h-8 w-8" />
+          </button>
+          <CodeSymbol value={bigCode} size={Math.min(360, Math.round(window.innerWidth * 0.85))} />
+          <p className="tabular text-2xl font-black tracking-wider">{bigCode}</p>
+          <p className="text-sm text-neutral-600">{product.name}</p>
+          <Link
+            to={`/imei/${encodeURIComponent(bigCode)}`}
+            onClick={(e) => e.stopPropagation()}
+            className="text-sm font-semibold text-blue-700 underline"
+          >
+            {t('stock360.openUnit')}
+          </Link>
+        </div>
+      )}
       <BackButton label={product.category} />
 
       <nav aria-label="Breadcrumb" className="text-sm text-muted-foreground">
@@ -185,19 +277,65 @@ export default function StockProduct360Page() {
       {/* ── the units themselves ─────────────────────────────────────────── */}
       {serialised && units.length > 0 && (
         <Card>
-          <CardHeader className="pb-2">
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 pb-2">
             <CardTitle className="text-base">
               {stock.available > units.length
                 ? t('stock360.onShelfMore', { shown: String(units.length), total: String(stock.available) })
                 : t('stock360.onShelf')}
             </CardTitle>
+            <div className="flex items-center gap-2">
+              {view === 'tickets' && codes.length > 0 && (
+                <Button size="sm" variant="outline" className="h-10 gap-2" disabled={printing} onClick={() => void printAll()}>
+                  <Printer className="h-4 w-4" />
+                  {t('stock360.printAll')}
+                </Button>
+              )}
+              <div className="flex rounded-lg border p-0.5" role="group">
+                {(
+                  [
+                    ['list', List, t('stock360.viewList')],
+                    ['tickets', LayoutGrid, t('stock360.viewTickets')],
+                  ] as const
+                ).map(([id, Icon, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    aria-label={label}
+                    title={label}
+                    aria-pressed={view === id}
+                    onClick={() => chooseView(id)}
+                    className={
+                      view === id
+                        ? 'flex h-9 w-10 items-center justify-center rounded-md bg-primary text-primary-foreground'
+                        : 'flex h-9 w-10 items-center justify-center rounded-md text-muted-foreground'
+                    }
+                  >
+                    <Icon className="h-5 w-5" />
+                  </button>
+                ))}
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
+            {view === 'tickets' ? (
+              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                {codes.map((code) => (
+                  <li key={code}>
+                    <button
+                      type="button"
+                      onClick={() => setBigCode(code)}
+                      className="flex w-full flex-col items-center gap-1.5 rounded-xl border border-dashed bg-white p-3 text-black transition active:scale-[0.98]"
+                    >
+                      <CodeSymbol value={code} size={120} />
+                      <span className="tabular w-full truncate text-center text-xs font-bold">{code}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
             <ul className="divide-y rounded-md border">
               {units.map((unit) => {
-                // Either handle opens the history; a label-received unit has
-                // only its printed code.
-                const handle = unit.imei ?? unit.label?.code ?? null;
+                const handle = handleOf(unit);
                 return (
                 <li key={unit.id}>
                   <Link
@@ -218,6 +356,7 @@ export default function StockProduct360Page() {
                 );
               })}
             </ul>
+            )}
           </CardContent>
         </Card>
       )}
