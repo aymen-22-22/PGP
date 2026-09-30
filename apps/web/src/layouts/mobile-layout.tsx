@@ -2,7 +2,6 @@ import {
   Banknote,
   BarChart3,
   Home,
-  LayoutDashboard,
   MoreHorizontal,
   Package,
   ScanLine,
@@ -61,7 +60,6 @@ const SELLING_TABS = TABS.map((tab) =>
  * the API refuses a sale from this account anyway.
  */
 const WAREHOUSE_TABS: Tab[] = [
-  { to: '/', label: 'nav.home', icon: LayoutDashboard, end: true },
   { to: '/scanner', label: 'nav.scanner', icon: ScanLine, centre: true },
   { to: '/stock', label: 'nav.stock', icon: Package },
   { to: '/more', label: 'nav.settings', icon: Settings },
@@ -84,7 +82,7 @@ export function MobileLayout() {
           {/* Home and More sit up here rather than in the bar, so all five
               bottom slots go to the work itself. */}
           <nav className="flex shrink-0 items-center gap-1" aria-label="Shortcuts">
-            {!tabs.some((tab) => tab.to === '/') && <HeaderLink to="/" label={t('nav.home')} icon={Home} end />}
+            {isAdmin(user) && !tabs.some((tab) => tab.to === '/') && <HeaderLink to="/" label={t('nav.home')} icon={Home} end />}
             {!tabs.some((tab) => tab.to === '/more') && (
               <HeaderLink to="/more" label={t('nav.more')} icon={MoreHorizontal} />
             )}

@@ -1,17 +1,5 @@
-import {
-  AlertTriangle,
-  CheckCircle2,
-  HelpCircle,
-  ImageIcon,
-  Inbox,
-  PackageCheck,
-  Printer,
-  ScanLine,
-  SendHorizontal,
-  Truck,
-  X,
-} from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Check, HelpCircle, ImageIcon, Printer, RotateCcw, ScanLine, SendHorizontal, Truck, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Label, Select } from '@/components/ui/input';
@@ -19,7 +7,6 @@ import { ErrorState, LoadingState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
 import { CodeScanInput } from '@/features/scanner/code-scan-input';
 import { scanFeedback } from '@/features/scanner/feedback';
-import type { CodeOutcome } from '@/features/scanner/use-code-buffer';
 import { useApiQuery } from '@/hooks/use-api';
 import { useI18n } from '@/i18n/provider';
 import { api } from '@/lib/api';
@@ -54,18 +41,41 @@ type Outcome =
     }
   | { status: 'NOT_FOUND'; code: string };
 
+/** What the big full-screen answer says after a scan. */
+interface Flash {
+  tone: 'received' | 'send' | 'duplicate' | 'problem';
+  title: string;
+  product?: ProductCard;
+  detail?: string;
+}
+
 interface SendLine {
   code: string;
   product: ProductCard;
 }
 
 const WAREHOUSE_KEY = 'perp_scanner_wh';
+const destinationKey = (sourceId: string) => `perp_scanner_dest:${sourceId}`;
+
+const read = (key: string) => {
+  try {
+    return localStorage.getItem(key) ?? '';
+  } catch {
+    return '';
+  }
+};
+const write = (key: string, value: string) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* remembered for this visit only */
+  }
+};
 
 /**
- * The warehouse floor on one screen: what is coming, a scanner, and the one
- * action each scan calls for. Nobody here needs to know whether a phone came
- * on a purchase order or a transfer — they scan, the system says what it is,
- * they confirm.
+ * The warehouse app. Scan: an incoming product is received on the spot, a
+ * product on the shelf joins the shipment, anything else says why not — each
+ * with a big coloured answer you can read from a metre away.
  */
 export default function ScannerPage() {
   const { t } = useI18n();
@@ -74,76 +84,81 @@ export default function ScannerPage() {
   const user = useAuth((s) => s.user);
   const admin = isAdmin(user);
 
-  const [warehouseId, setWarehouseId] = useState(() => {
-    try {
-      return localStorage.getItem(WAREHOUSE_KEY) ?? '';
-    } catch {
-      return '';
-    }
-  });
+  const [warehouseId, setWarehouseId] = useState(() => read(WAREHOUSE_KEY));
   const warehouses = useApiQuery<{ id: string; name: string }[]>('/warehouses', { enabled: admin });
-  const wh = admin ? warehouseId : '';
-  const ready = !admin || !!warehouseId;
+  const sourceId = admin ? warehouseId : (user?.warehouseId ?? '');
+  const ready = !!sourceId;
   const scope = admin && warehouseId ? { warehouseId } : {};
 
-  const incoming = useApiQuery<Incoming>(`/ops/incoming${wh ? `?warehouseId=${wh}` : ''}`, { enabled: ready });
+  const incoming = useApiQuery<Incoming>(`/ops/incoming${admin && warehouseId ? `?warehouseId=${warehouseId}` : ''}`, {
+    enabled: ready,
+  });
 
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
-  const [scanState, setScanState] = useState<CodeOutcome | null>(null);
+  const [flash, setFlash] = useState<Flash | null>(null);
   const [busy, setBusy] = useState(false);
-  const [autoReceive, setAutoReceive] = useState(false);
   const [sendLines, setSendLines] = useState<SendLine[]>([]);
   const [destinations, setDestinations] = useState<{ id: string; name: string }[]>([]);
   const [destinationId, setDestinationId] = useState('');
-  const scannerRef = useRef<HTMLDivElement>(null);
 
+  // The last destination used from here comes back by itself; a single
+  // possible destination is simply chosen.
   useEffect(() => {
-    if (destinations.length === 1) setDestinationId(destinations[0]!.id);
-  }, [destinations]);
+    if (destinations.length === 0) return;
+    const remembered = read(destinationKey(sourceId));
+    if (destinations.some((d) => d.id === remembered)) setDestinationId(remembered);
+    else if (destinations.length === 1) setDestinationId(destinations[0]!.id);
+  }, [destinations, sourceId]);
 
-  const receive = async (code: string) => {
-    setBusy(true);
-    try {
-      const r = await api.post<{ remaining: number; product: ProductCard }>('/ops/receive', { code, ...scope });
-      scanFeedback('accepted');
-      toast.push('success', t('ops.received', { name: r.product.name, count: r.remaining }));
-      setOutcome(null);
-      void incoming.refetch();
-    } catch (error) {
-      scanFeedback('rejected');
-      toast.push('error', (error as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
+  // The big answer fades by itself so the next scan can follow straight away.
+  useEffect(() => {
+    if (!flash) return;
+    const timer = setTimeout(() => setFlash(null), 1800);
+    return () => clearTimeout(timer);
+  }, [flash]);
 
   const onScan = async (raw: string) => {
     const code = raw.trim();
     if (!code || busy) return;
     if (sendLines.some((l) => l.code.toUpperCase() === code.toUpperCase())) {
-      setScanState({ kind: 'duplicate', code });
       scanFeedback('duplicate');
+      setFlash({ tone: 'duplicate', title: t('ops.flash.duplicate'), detail: code });
       return;
     }
     setBusy(true);
     try {
       const result = await api.post<Outcome>('/ops/scan', { code, ...scope });
-      setOutcome(result);
-      const good = result.status === 'INCOMING' || result.status === 'AVAILABLE';
-      setScanState(good ? { kind: 'accepted', code } : { kind: 'stray', code, reason: t(`ops.status.${result.status}`) });
-      scanFeedback(good ? 'accepted' : 'rejected');
 
-      if (result.status === 'AVAILABLE') {
+      if (result.status === 'INCOMING') {
+        // Received on the spot: no button to press.
+        const done = await api.post<{ remaining: number; product: ProductCard }>('/ops/receive', {
+          code: result.code,
+          ...scope,
+        });
+        scanFeedback('accepted');
+        setFlash({
+          tone: 'received',
+          title: t('ops.flash.received'),
+          product: done.product,
+          detail: t('ops.left', { count: done.remaining }),
+        });
+        void incoming.refetch();
+      } else if (result.status === 'AVAILABLE') {
+        scanFeedback('accepted');
         setSendLines((lines) => [{ code: result.code, product: result.product }, ...lines]);
         setDestinations(result.destinations);
-      }
-      if (result.status === 'INCOMING' && autoReceive) {
-        setBusy(false);
-        await receive(result.code);
-        return;
+        setFlash({ tone: 'send', title: t('ops.flash.send'), product: result.product });
+      } else {
+        scanFeedback('rejected');
+        setFlash({
+          tone: 'problem',
+          title: t(`ops.status.${result.status}`),
+          product: 'product' in result ? result.product : undefined,
+          detail: 'where' in result && result.where ? result.where : code,
+        });
       }
     } catch (error) {
-      toast.push('error', (error as Error).message);
+      scanFeedback('rejected');
+      setFlash({ tone: 'problem', title: t('ops.flash.error'), detail: (error as Error).message });
     } finally {
       setBusy(false);
     }
@@ -153,14 +168,14 @@ export default function ScannerPage() {
     if (!destinationId || sendLines.length === 0) return;
     setBusy(true);
     try {
-      const r = await api.post<{ number: string; count: number }>('/ops/send', {
+      const r = await api.post<{ count: number }>('/ops/send', {
         codes: sendLines.map((l) => l.code),
         destinationWarehouseId: destinationId,
         ...scope,
       });
+      write(destinationKey(sourceId), destinationId);
       toast.push('success', t('ops.sent', { count: r.count, to: destinations.find((d) => d.id === destinationId)?.name ?? '' }));
       setSendLines([]);
-      setOutcome(null);
     } catch (error) {
       toast.push('error', (error as Error).message);
     } finally {
@@ -182,11 +197,6 @@ export default function ScannerPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
-      <h1 className="flex items-center gap-2 text-2xl font-bold">
-        <ScanLine className="h-6 w-6 text-primary" />
-        {t('ops.title')}
-      </h1>
-
       {admin && (
         <div className="space-y-1.5">
           <Label htmlFor="ops-wh">{t('common.warehouse')}</Label>
@@ -196,12 +206,7 @@ export default function ScannerPage() {
             onChange={(e) => {
               setWarehouseId(e.target.value);
               setSendLines([]);
-              setOutcome(null);
-              try {
-                localStorage.setItem(WAREHOUSE_KEY, e.target.value);
-              } catch {
-                /* remembered for this visit only */
-              }
+              write(WAREHOUSE_KEY, e.target.value);
             }}
           >
             <option value="">{t('common.choose')}</option>
@@ -216,22 +221,9 @@ export default function ScannerPage() {
 
       {ready && (
         <>
-          <div ref={scannerRef} className="space-y-3 rounded-xl border bg-card p-4">
-            <CodeScanInput outcome={scanState} onScan={(code) => void onScan(code)} />
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="h-4 w-4"
-                checked={autoReceive}
-                onChange={(e) => setAutoReceive(e.target.checked)}
-              />
-              {t('ops.autoReceive')}
-            </label>
+          <div className="rounded-xl border bg-card p-4">
+            <CodeScanInput compact outcome={null} disabled={busy} onScan={(code) => void onScan(code)} />
           </div>
-
-          {outcome && (
-            <ResultCard outcome={outcome} busy={busy} onReceive={(c) => void receive(c)} onClose={() => setOutcome(null)} />
-          )}
 
           {sendLines.length > 0 && (
             <section className="space-y-3 rounded-xl border-2 border-orange-300 bg-orange-50/60 p-4 dark:bg-orange-950/20">
@@ -243,10 +235,7 @@ export default function ScannerPage() {
                 {sendLines.map((l) => (
                   <li key={l.code} className="flex items-center gap-3 px-3 py-2">
                     <Thumb product={l.product} size="sm" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{l.product.name}</p>
-                      <p className="tabular truncate text-xs text-muted-foreground">{l.code}</p>
-                    </div>
+                    <p className="min-w-0 flex-1 truncate text-sm font-medium">{l.product.name}</p>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -258,17 +247,24 @@ export default function ScannerPage() {
                   </li>
                 ))}
               </ul>
-              <div className="space-y-1.5">
-                <Label htmlFor="ops-dest">{t('ops.destination')}</Label>
-                <Select id="ops-dest" value={destinationId} onChange={(e) => setDestinationId(e.target.value)}>
-                  {destinations.length !== 1 && <option value="">{t('common.choose')}</option>}
+              {destinations.length === 1 ? (
+                <p className="text-sm">
+                  → <span className="font-semibold">{destinations[0]!.name}</span>
+                </p>
+              ) : (
+                <Select
+                  aria-label={t('ops.destination')}
+                  value={destinationId}
+                  onChange={(e) => setDestinationId(e.target.value)}
+                >
+                  <option value="">{t('ops.destination')}</option>
                   {destinations.map((d) => (
                     <option key={d.id} value={d.id}>
                       {d.name}
                     </option>
                   ))}
                 </Select>
-              </div>
+              )}
               <Button
                 size="lg"
                 className="w-full gap-2 bg-orange-600 hover:bg-orange-700"
@@ -282,59 +278,48 @@ export default function ScannerPage() {
           )}
 
           <section className="space-y-3">
-            <h2 className="flex items-center gap-2 text-lg font-semibold">
-              <Inbox className="h-5 w-5 text-blue-600" />
-              {t('ops.incoming')}
-              {incoming.data && incoming.data.total > 0 && (
-                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-sm text-blue-800">{incoming.data.total}</span>
-              )}
-            </h2>
+            <h2 className="text-lg font-semibold">{t('ops.incoming')}</h2>
             {incoming.isLoading && <LoadingState />}
             {incoming.isError && <ErrorState error={incoming.error} onRetry={() => void incoming.refetch()} />}
             {incoming.data && incoming.data.items.length === 0 && (
-              <p className="flex items-center gap-2 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                <CheckCircle2 className="h-5 w-5 text-success" />
+              <p className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
                 {t('ops.nothingIncoming')}
               </p>
             )}
             <ul className="space-y-2">
               {incoming.data?.items.map((item) => (
-                <li key={item.product.id} className="space-y-3 rounded-xl border bg-card p-3">
-                  <div className="flex items-center gap-3">
-                    <Thumb product={item.product} />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold leading-tight">{item.product.name}</p>
-                      <p className="text-sm font-medium text-blue-700">{t('ops.toReceive', { count: item.toReceive })}</p>
-                    </div>
+                <li key={item.product.id} className="flex items-center gap-3 rounded-xl border bg-card p-3">
+                  <Thumb product={item.product} />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold leading-tight">{item.product.name}</p>
+                    <p className="text-sm font-bold text-blue-700">{t('ops.toReceive', { count: item.toReceive })}</p>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  {item.purchaseIds.length > 0 && (
                     <Button
-                      size="sm"
-                      className="gap-1"
-                      onClick={() => scannerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                      size="icon"
+                      variant="outline"
+                      className="h-11 w-11 shrink-0"
+                      aria-label={t('ops.printCodes')}
+                      title={t('ops.printCodes')}
+                      onClick={() => void printCodes(item)}
                     >
-                      <ScanLine className="h-4 w-4" />
-                      {t('ops.scan')}
+                      <Printer className="h-5 w-5" />
                     </Button>
-                    {item.purchaseIds.length > 0 && (
-                      <Button size="sm" variant="outline" className="gap-1" onClick={() => void printCodes(item)}>
-                        <Printer className="h-4 w-4" />
-                        {t('ops.printCodes')}
-                      </Button>
-                    )}
-                  </div>
+                  )}
                 </li>
               ))}
             </ul>
           </section>
         </>
       )}
+
+      {flash && <FlashScreen flash={flash} onClose={() => setFlash(null)} />}
     </div>
   );
 }
 
 function Thumb({ product, size = 'md' }: { product: ProductCard; size?: 'sm' | 'md' | 'lg' }) {
-  const box = size === 'sm' ? 'h-10 w-10' : size === 'lg' ? 'h-24 w-24' : 'h-14 w-14';
+  const box = size === 'sm' ? 'h-10 w-10' : size === 'lg' ? 'h-28 w-28' : 'h-14 w-14';
   return (
     <span className={cn('flex shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted', box)}>
       {product.imageUrl ? (
@@ -346,73 +331,40 @@ function Thumb({ product, size = 'md' }: { product: ProductCard; size?: 'sm' | '
   );
 }
 
-/** The answer to a scan: what it is, and the one button that matters. */
-function ResultCard({
-  outcome,
-  busy,
-  onReceive,
-  onClose,
-}: {
-  outcome: Outcome;
-  busy: boolean;
-  onReceive: (code: string) => void;
-  onClose: () => void;
-}) {
-  const { t } = useI18n();
-  const tone =
-    outcome.status === 'INCOMING'
-      ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/30'
-      : outcome.status === 'AVAILABLE'
-        ? 'border-orange-400 bg-orange-50 dark:bg-orange-950/30'
-        : outcome.status === 'NOT_FOUND'
-          ? 'border-destructive/50 bg-destructive/5'
-          : 'border-amber-400 bg-amber-50 dark:bg-amber-950/30';
-  const Icon =
-    outcome.status === 'INCOMING'
-      ? PackageCheck
-      : outcome.status === 'AVAILABLE'
-        ? Truck
-        : outcome.status === 'NOT_FOUND'
-          ? HelpCircle
-          : AlertTriangle;
+const FLASH_LOOK: Record<Flash['tone'], { bg: string; icon: typeof Check }> = {
+  received: { bg: 'bg-green-600', icon: Check },
+  send: { bg: 'bg-orange-500', icon: Truck },
+  duplicate: { bg: 'bg-amber-500', icon: RotateCcw },
+  problem: { bg: 'bg-red-600', icon: HelpCircle },
+};
 
+/** The answer to a scan, big enough to read from across the bench. Tap to close. */
+function FlashScreen({ flash, onClose }: { flash: Flash; onClose: () => void }) {
+  const look = FLASH_LOOK[flash.tone];
+  const Icon = look.icon;
   return (
-    <section className={cn('relative rounded-2xl border-2 p-4', tone)} aria-live="polite">
-      <button
-        type="button"
-        onClick={onClose}
-        className="absolute end-3 top-3 rounded-md p-1 text-muted-foreground hover:bg-black/5"
-        aria-label={t('common.close')}
-      >
-        <X className="h-5 w-5" />
-      </button>
-      <div className="flex items-center gap-4">
-        {'product' in outcome ? <Thumb product={outcome.product} size="lg" /> : <Icon className="h-12 w-12 text-destructive" />}
-        <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide">
-            <Icon className="h-4 w-4" />
-            {t(`ops.status.${outcome.status}`)}
-          </p>
-          {'product' in outcome && <p className="text-xl font-bold leading-tight">{outcome.product.name}</p>}
-          <p className="tabular truncate text-xs text-muted-foreground">{outcome.code}</p>
-          {outcome.status === 'INCOMING' && (
-            <p className="mt-1 text-sm font-medium text-blue-800">{t('ops.toReceive', { count: outcome.remaining })}</p>
-          )}
-          {outcome.status === 'AVAILABLE' && (
-            <p className="mt-1 text-sm">{t('ops.availableIn', { warehouse: outcome.warehouse })}</p>
-          )}
-          {'where' in outcome && outcome.where && <p className="mt-1 text-sm">{outcome.where}</p>}
-        </div>
-      </div>
-      {outcome.status === 'INCOMING' && (
-        <Button size="xl" className="mt-4 w-full gap-2 bg-blue-600 hover:bg-blue-700" disabled={busy} onClick={() => onReceive(outcome.code)}>
-          <PackageCheck className="h-6 w-6" />
-          {t('ops.receive')}
-        </Button>
+    <button
+      type="button"
+      onClick={onClose}
+      role="status"
+      aria-live="assertive"
+      className={cn(
+        'fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 p-6 text-center text-white',
+        look.bg,
       )}
-      {outcome.status === 'AVAILABLE' && (
-        <p className="mt-3 text-sm font-medium text-orange-800">{t('ops.addedToSend')}</p>
+    >
+      <span className="flex h-24 w-24 items-center justify-center rounded-full bg-white/20">
+        <Icon className="h-14 w-14" strokeWidth={3} />
+      </span>
+      <p className="text-4xl font-black uppercase tracking-wide">{flash.title}</p>
+      {flash.product && (
+        <span className="flex flex-col items-center gap-3">
+          <Thumb product={flash.product} size="lg" />
+          <span className="text-xl font-bold">{flash.product.name}</span>
+        </span>
       )}
-    </section>
+      {flash.detail && <p className="text-lg opacity-90">{flash.detail}</p>}
+      <ScanLine className="mt-6 h-6 w-6 opacity-60" aria-hidden />
+    </button>
   );
 }

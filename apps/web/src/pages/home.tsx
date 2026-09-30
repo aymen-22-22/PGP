@@ -15,7 +15,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { Fragment, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Stat, StatGrid } from '@/components/ui/stat';
 import { ErrorState, LoadingState } from '@/components/ui/states';
@@ -24,7 +24,6 @@ import type { Dashboard } from '@phone-erp/shared-types';
 import { useI18n } from '@/i18n/provider';
 import { useApiQuery } from '@/hooks/use-api';
 import { isAdmin, useAuth } from '@/lib/auth';
-import WarehouseHome from './warehouse-home';
 import { countryFromWarehouseCode, countryName, flagOf, groupByCountry } from '@/lib/countries';
 import { cn, formatNumber, plural } from '@/lib/utils';
 
@@ -39,7 +38,7 @@ export default function HomePage() {
   const ledger = (name: string) => `/ledger/${name}`;
 
   // Warehouse staff get an operational home: scan first, no sales or money.
-  if (!admin) return <WarehouseHome />;
+  if (!admin) return <Navigate to="/scanner" replace />;
 
   if (query.isLoading) return <LoadingState label="Loading your dashboard…" />;
   if (query.isError) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
