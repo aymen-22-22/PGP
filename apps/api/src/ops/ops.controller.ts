@@ -17,12 +17,6 @@ export class OpsController {
     return this.ops.incoming(user, q.warehouseId);
   }
 
-  @Get('activity')
-  @ApiOperation({ summary: 'Recent receptions and shipments in the warehouse, one line per step' })
-  activity(@CurrentUser() user: RequestUser, @Query() q: OpsWarehouseQueryDto) {
-    return this.ops.activity(user, q.warehouseId);
-  }
-
   @Post('scan')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'What a scanned code is here, and what can be done' })

@@ -250,46 +250,6 @@ export class OpsService {
     return { transferId: created.id, number: created.number, count: resolved.length };
   }
 
-  /** What happened in this warehouse lately, one line per step (not per phone). */
-  async activity(user: RequestUser, requested?: string) {
-    const warehouseId = this.warehouseFor(user, requested);
-    this.access.assertAccess(user, warehouseId);
-    const rows = await this.prisma.deviceMovement.findMany({
-      where: { OR: [{ fromWarehouseId: warehouseId }, { toWarehouseId: warehouseId }] },
-      orderBy: { createdAt: 'desc' },
-      take: 400,
-      select: {
-        type: true,
-        createdAt: true,
-        referenceId: true,
-        fromWarehouse: { select: { name: true } },
-        toWarehouse: { select: { name: true } },
-        performedBy: { select: { name: true } },
-        device: { select: { product: { select: { id: true, name: true, imageUrl: true } } } },
-      },
-    });
-    const steps = new Map<
-      string,
-      { type: string; at: string; product: ProductCard; count: number; from: string | null; to: string | null; by: string | null }
-    >();
-    for (const m of rows) {
-      const key = [m.type, m.referenceId ?? m.createdAt.toISOString(), m.device.product.id].join('|');
-      const step = steps.get(key);
-      if (step) step.count += 1;
-      else
-        steps.set(key, {
-          type: m.type,
-          at: m.createdAt.toISOString(),
-          product: m.device.product,
-          count: 1,
-          from: m.fromWarehouse?.name ?? null,
-          to: m.toWarehouse?.name ?? null,
-          by: m.performedBy?.name ?? null,
-        });
-    }
-    return { data: [...steps.values()].slice(0, 40) };
-  }
-
   /** Units of one product still to arrive here — the number the scanner counts down. */
   private async remainingFor(warehouseId: string, productId: string): Promise<number> {
     const [po, transit] = await Promise.all([

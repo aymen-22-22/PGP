@@ -1,5 +1,4 @@
 import {
-  Activity,
   Banknote,
   BarChart3,
   Home,
@@ -63,9 +62,8 @@ const SELLING_TABS = TABS.map((tab) =>
  */
 const WAREHOUSE_TABS: Tab[] = [
   { to: '/', label: 'nav.home', icon: LayoutDashboard, end: true },
-  { to: '/stock', label: 'nav.stock', icon: Package },
   { to: '/scanner', label: 'nav.scanner', icon: ScanLine, centre: true },
-  { to: '/activity', label: 'nav.activity', icon: Activity },
+  { to: '/stock', label: 'nav.stock', icon: Package },
   { to: '/more', label: 'nav.settings', icon: Settings },
 ];
 
