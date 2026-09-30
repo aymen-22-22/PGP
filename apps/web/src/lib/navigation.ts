@@ -7,12 +7,10 @@ import {
   Coins,
   FileClock,
   HeartPulse,
-  Inbox,
   LayoutDashboard,
   Mail,
   Package,
   ScanLine,
-  SendHorizontal,
   ShoppingCart,
   Store,
   Tag,
@@ -50,7 +48,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { to: '/', label: 'nav.dashboard', icon: LayoutDashboard },
       { to: '/stock', label: 'nav.stock', icon: Package },
-      { to: '/scan', label: 'nav.scan', icon: ScanLine },
+      { to: '/scanner', label: 'nav.scanner', icon: ScanLine },
       { to: '/movements', label: 'nav.movements', icon: Truck },
     ],
   },
@@ -58,7 +56,6 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'nav.section.inbound',
     items: [
       { to: '/purchases', label: 'nav.purchases', icon: ShoppingCart },
-      { to: '/receive', label: 'nav.receive', icon: Inbox },
       { to: '/receipts', label: 'nav.receipts', icon: ClipboardCheck },
       { to: '/costs', label: 'nav.costs', icon: Coins },
     ],
@@ -66,7 +63,6 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: 'nav.section.distribution',
     items: [
-      { to: '/send', label: 'nav.send', icon: SendHorizontal },
       { to: '/transfers', label: 'nav.transfers', icon: Truck },
     ],
   },
@@ -139,6 +135,6 @@ export const sellsAtCounter = (user: AuthUser | null): boolean => user?.countryC
 /** The destinations on the phone's bottom bar, for this user. */
 export const bottomTabsFor = (user: AuthUser | null): string[] =>
   isAdmin(user)
-    ? ['/purchases', sellsAtCounter(user) ? '/pos' : '/sales', '/scan', '/transfers', '/stock']
+    ? ['/', '/stock', '/scanner', sellsAtCounter(user) ? '/pos' : '/sales', '/more']
     : // The scanner, stock and settings — nothing else.
       ['/stock', '/scanner', '/more'];

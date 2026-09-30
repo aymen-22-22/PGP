@@ -21,7 +21,7 @@ export class OpsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'What a scanned code is here, and what can be done' })
   scan(@CurrentUser() user: RequestUser, @Body() dto: OpsScanDto) {
-    return this.ops.scan(user, dto.code, dto.warehouseId);
+    return this.ops.scanWithOffice(user, dto.code, dto.warehouseId);
   }
 
   @Post('receive')

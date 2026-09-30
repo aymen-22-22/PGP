@@ -1,4 +1,4 @@
-import { Image as ImageIcon, Package } from 'lucide-react';
+import { Image as ImageIcon, Package, Truck } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { BackButton } from '@/components/page';
 import { Badge } from '@/components/ui/badge';
@@ -60,52 +60,48 @@ export default function StockProductsPage() {
         <EmptyState icon={Package} title={t('stock.noProducts.title')} description={t('stock.noProducts.body')} />
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Same cards as the scanner: the photo first, the numbers as icon badges on it. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {data.map((product) => {
           const status = STOCK_STATUS[product.status];
           return (
             <Link
               key={product.productId}
               to={`/stock/${warehouseId}/product/${product.productId}`}
-              className="group flex flex-col overflow-hidden rounded-lg border bg-card shadow-sm transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="group relative flex flex-col overflow-hidden rounded-2xl border bg-card shadow-sm transition hover:border-primary/50 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
-              <div className="flex h-36 items-center justify-center bg-muted">
+              <div className="relative flex aspect-square items-center justify-center bg-muted">
                 {product.imageUrl ? (
                   <img src={product.imageUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
                 ) : (
-                  <ImageIcon className="h-9 w-9 text-muted-foreground" aria-hidden />
+                  <ImageIcon className="h-10 w-10 text-muted-foreground" aria-hidden />
                 )}
+                <span
+                  className="absolute start-2 top-2 flex h-9 items-center gap-1 rounded-full bg-emerald-600 px-2.5 text-lg font-black text-white shadow"
+                  title={t('stock.available')}
+                >
+                  <Package className="h-4 w-4" strokeWidth={3} aria-hidden />
+                  {formatNumber(product.quantity)}
+                </span>
+                {product.inShipment > 0 && (
+                  <span
+                    className="absolute end-2 top-2 flex h-9 items-center gap-1 rounded-full bg-orange-500 px-2.5 text-lg font-black text-white shadow"
+                    title={t('stock.inShipment')}
+                  >
+                    <Truck className="h-4 w-4" strokeWidth={3} aria-hidden />
+                    {formatNumber(product.inShipment)}
+                  </span>
+                )}
+                <span className={`absolute bottom-2 start-2 rounded-md border bg-card/90 px-2 py-0.5 text-xs font-medium ${status.tone}`}>
+                  {t(status.label)}
+                </span>
               </div>
 
-              <div className="flex flex-1 flex-col gap-3 p-4">
-                <div className="min-w-0">
-                  <p className="truncate font-bold leading-tight">{product.name}</p>
-                  <p className="tabular text-xs text-muted-foreground">SKU {product.sku}</p>
-                  {product.barcode && (
-                    <p className="tabular text-xs text-muted-foreground">Barcode {product.barcode}</p>
-                  )}
-                </div>
-
-                <dl className="grid grid-cols-3 gap-2 border-t pt-3 text-center text-sm">
-                  <Count label={t('stock.available')} value={product.quantity} tone="text-success" />
-                  <Count label={t('stock.inShipment')} value={product.inShipment} />
-                  <Count label={t('stock.soldLabel')} value={product.sold} tone="text-muted-foreground" />
-                </dl>
-
-                <div className="mt-auto flex items-end justify-between gap-2 border-t pt-3">
-                  {showMoney ? (
-                    <div>
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">{t('stock.stockValue')}</p>
-                      <p className="tabular font-bold">{money(product.stockValue!)}</p>
-                    </div>
-                  ) : (
-                    <span />
-                  )}
-                  <span className={`rounded-md border px-2 py-0.5 text-xs font-medium ${status.tone}`}>
-                    {t(status.label)}
-                  </span>
-                </div>
-
+              <div className="flex flex-1 flex-col gap-1 p-3">
+                <p className="line-clamp-2 text-sm font-bold leading-tight">{product.name}</p>
+                {showMoney && (
+                  <p className="tabular mt-auto text-sm font-semibold text-muted-foreground">{money(product.stockValue!)}</p>
+                )}
                 {product.tracking === 'BULK' && (
                   <Badge variant="secondary" className="self-start">
                     {t('stock.countedByQuantity')}
@@ -120,11 +116,3 @@ export default function StockProductsPage() {
   );
 }
 
-function Count({ label, value, tone }: { label: string; value: number; tone?: string }) {
-  return (
-    <div>
-      <dt className="text-[0.65rem] uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className={`tabular text-lg font-bold ${tone ?? ''}`}>{formatNumber(value)}</dd>
-    </div>
-  );
-}

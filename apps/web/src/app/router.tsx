@@ -15,7 +15,6 @@ const StockWarehousesPage = lazy(() => import('@/pages/stock-warehouses'));
 const StockCategoriesPage = lazy(() => import('@/pages/stock-categories'));
 const StockProductsPage = lazy(() => import('@/pages/stock-products'));
 const StockProduct360Page = lazy(() => import('@/pages/stock-product-360'));
-const ScanPage = lazy(() => import('@/pages/scan'));
 const ImeiDetailPage = lazy(() => import('@/pages/imei-detail'));
 const MovementsPage = lazy(() => import('@/pages/movements'));
 const MorePage = lazy(() => import('@/pages/more'));
@@ -24,8 +23,6 @@ const PurchaseDetailPage = lazy(() => import('@/pages/purchase-detail'));
 const PurchaseLabelsPage = lazy(() => import('@/pages/purchase-labels'));
 const PurchaseReceiveScanPage = lazy(() => import('@/pages/purchase-receive-scan'));
 const ReceiptsPage = lazy(() => import('@/pages/receipts'));
-const ReceivePage = lazy(() => import('@/pages/receive'));
-const SendPage = lazy(() => import('@/pages/send'));
 const ScannerPage = lazy(() => import('@/pages/scanner'));
 const SaleInvoicePage = lazy(() => import('@/pages/sale-invoice'));
 const CompanySettingsPage = lazy(() => import('@/pages/company-settings'));
@@ -122,7 +119,8 @@ export function AppRouter() {
           <Route path="stock/:warehouseId/product/:productId" element={<StockProduct360Page />} />
           <Route path="stock/:warehouseId/:category" element={<StockProductsPage />} />
           <Route path="ledger/:kind" element={<LedgerPage />} />
-          <Route path="scan" element={<ScanPage />} />
+          {/* One scanner for everyone: the old separate pages land on it. */}
+          <Route path="scan" element={<Navigate to="/scanner" replace />} />
           <Route path="imei/:imei" element={<ImeiDetailPage />} />
           <Route path="movements" element={<MovementsPage />} />
           <Route path="more" element={<MorePage />} />
@@ -132,8 +130,8 @@ export function AppRouter() {
           <Route path="purchases/:id/labels" element={<PurchaseLabelsPage />} />
           <Route path="purchases/:id/receive-scan" element={<PurchaseReceiveScanPage />} />
           <Route path="receipts" element={<ReceiptsPage />} />
-          <Route path="receive" element={<ReceivePage />} />
-          <Route path="send" element={<SendPage />} />
+          <Route path="receive" element={<Navigate to="/scanner" replace />} />
+          <Route path="send" element={<Navigate to="/scanner" replace />} />
           <Route path="scanner" element={<ScannerPage />} />
 
           <Route path="transfers" element={<TransfersPage />} />
