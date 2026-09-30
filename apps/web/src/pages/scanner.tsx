@@ -296,7 +296,7 @@ export default function ScannerPage() {
               </Button>
             }
           />
-          {cameraOn && <CameraScanner active fullscreen hideToggle onActiveChange={setCameraOn} onDetect={onDetect} />}
+          {cameraOn && <CameraScanner active square hideToggle onActiveChange={setCameraOn} onDetect={onDetect} />}
 
           {sendLines.length > 0 && (
             <section className="space-y-3 rounded-xl border-2 border-orange-300 bg-orange-50/60 p-4 dark:bg-orange-950/20">

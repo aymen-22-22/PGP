@@ -1,4 +1,4 @@
-import { Camera, CameraOff, Flashlight, FlashlightOff, X } from 'lucide-react';
+import { Camera, CameraOff, Flashlight, FlashlightOff } from 'lucide-react';
 
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -37,15 +37,15 @@ export function CameraScanner({
   active: controlled,
   onActiveChange,
   hideToggle = false,
-  fullscreen = false,
+  square = false,
 }: {
   onDetect: (value: string) => void;
   /** Set to drive the camera from outside, e.g. from one big button. */
   active?: boolean;
   onActiveChange?: (active: boolean) => void;
   hideToggle?: boolean;
-  /** Takes the whole screen, with a square guide that fits QR codes and barcodes alike. */
-  fullscreen?: boolean;
+  /** A big square view with light and 2× zoom; reads the square, so QR codes fit whole. */
+  square?: boolean;
 }) {
   const { t } = useI18n();
   // Read from inside the camera callbacks, which outlive a render.
@@ -66,6 +66,15 @@ export function CameraScanner({
   const [torchAvailable, setTorchAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  // 2× for small labels: the lens zooms where the phone allows it, otherwise
+  // the picture and the read area are both cropped to the middle.
+  const [zoomed, setZoomed] = useState(false);
+  const [hardwareZoom, setHardwareZoom] = useState<{ min: number; max: number } | null>(null);
+  const digitalZoom = useRef(false);
+  digitalZoom.current = zoomed && !hardwareZoom;
+  // The frame turns green for a moment when something is read.
+  const [hit, setHit] = useState(false);
+  const hitTimer = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     if (!active) return;
@@ -95,6 +104,9 @@ export function CameraScanner({
       if (recent.has(value)) return false;
 
       recent.set(value, now);
+      setHit(true);
+      clearTimeout(hitTimer.current);
+      hitTimer.current = setTimeout(() => setHit(false), 450);
       onDetect(value);
       return true;
     };
@@ -170,10 +182,10 @@ export function CameraScanner({
         // per bar and the decoder cannot resolve it — the same failure as
         // accepting a 640x480 capture, reintroduced by the downscale that used
         // to be here. Take the middle third of the height at full resolution.
-        if (fullscreen) {
+        if (square) {
           // The square guide in the middle: a QR code is as tall as it is
           // wide, so a thin band would cut it in half.
-          const side = Math.max(1, Math.round(Math.min(vw, vh) * 0.8));
+          const side = Math.max(1, Math.round((Math.min(vw, vh) * 0.8) / (digitalZoom.current ? 2 : 1)));
           scratch.width = side;
           scratch.height = side;
           scratchCtx.drawImage(video, Math.round((vw - side) / 2), Math.round((vh - side) / 2), side, side, 0, 0, side, side);
@@ -272,8 +284,9 @@ export function CameraScanner({
         // a label will not read.
         const track = stream.getVideoTracks()[0] ?? null;
         trackRef.current = track;
-        const caps = (track?.getCapabilities?.() ?? {}) as { torch?: boolean };
+        const caps = (track?.getCapabilities?.() ?? {}) as { torch?: boolean; zoom?: { min: number; max: number } };
         setTorchAvailable(!!caps.torch);
+        setHardwareZoom(caps.zoom && caps.zoom.max >= 1.5 ? caps.zoom : null);
         await video.play();
 
         if (nativeScanSupported()) {
@@ -306,9 +319,11 @@ export function CameraScanner({
       trackRef.current = null;
       setTorchAvailable(false);
       setTorchOn(false);
+      setZoomed(false);
+      setHardwareZoom(null);
       stream?.getTracks().forEach((track) => track.stop());
     };
-  }, [active, onDetect, fullscreen]);
+  }, [active, onDetect, square]);
 
   if (!cameraScanSupported()) return null;
 
@@ -321,48 +336,77 @@ export function CameraScanner({
         </Button>
       )}
 
-      {active && fullscreen && (
-        <div className="fixed inset-0 z-[45] bg-black">
-          <video ref={videoRef} playsInline muted className="h-full w-full object-cover" />
-          {/* Square guide with corner marks, for QR codes and barcodes alike. */}
-          <div className="pointer-events-none absolute left-1/2 top-1/2 aspect-square w-[78vmin] -translate-x-1/2 -translate-y-1/2 rounded-3xl shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]">
-            <span className="absolute -left-1 -top-1 h-12 w-12 rounded-tl-3xl border-l-[6px] border-t-[6px] border-white" />
-            <span className="absolute -right-1 -top-1 h-12 w-12 rounded-tr-3xl border-r-[6px] border-t-[6px] border-white" />
-            <span className="absolute -bottom-1 -left-1 h-12 w-12 rounded-bl-3xl border-b-[6px] border-l-[6px] border-white" />
-            <span className="absolute -bottom-1 -right-1 h-12 w-12 rounded-br-3xl border-b-[6px] border-r-[6px] border-white" />
+      {active && square && (
+        <div className="relative aspect-square w-full overflow-hidden rounded-2xl bg-black">
+          <video
+            ref={videoRef}
+            playsInline
+            muted
+            className="h-full w-full object-cover transition-transform"
+            style={digitalZoom.current ? { transform: 'scale(2)' } : undefined}
+          />
+          {/* Square guide with corner marks: QR codes and barcodes alike. Green for a moment on a read. */}
+          <div className="pointer-events-none absolute inset-[10%]">
+            {[
+              '-left-1 -top-1 rounded-tl-2xl border-l-[6px] border-t-[6px]',
+              '-right-1 -top-1 rounded-tr-2xl border-r-[6px] border-t-[6px]',
+              '-bottom-1 -left-1 rounded-bl-2xl border-b-[6px] border-l-[6px]',
+              '-bottom-1 -right-1 rounded-br-2xl border-b-[6px] border-r-[6px]',
+            ].map((corner) => (
+              <span
+                key={corner}
+                className={cn('absolute h-12 w-12 transition-colors', corner, hit ? 'border-green-400' : 'border-white')}
+              />
+            ))}
           </div>
+        </div>
+      )}
+      {active && square && (
+        <div className="flex justify-center gap-6">
           <button
             type="button"
-            aria-label={t('camera.stop')}
-            onClick={() => setActive(false)}
-            className="absolute end-4 top-[max(1rem,env(safe-area-inset-top))] flex h-14 w-14 items-center justify-center rounded-full bg-black/60 text-white active:scale-95"
+            aria-label={torchOn ? t('camera.lightOff') : t('camera.light')}
+            aria-pressed={torchOn}
+            disabled={!torchAvailable}
+            onClick={() => {
+              const next = !torchOn;
+              void trackRef.current
+                ?.applyConstraints({ advanced: [{ torch: next }] } as unknown as MediaTrackConstraints)
+                .then(() => setTorchOn(next))
+                .catch(() => setTorchAvailable(false));
+            }}
+            className={cn(
+              'flex h-16 w-16 items-center justify-center rounded-full active:scale-95 disabled:opacity-40',
+              torchOn ? 'bg-yellow-300 text-black' : 'bg-muted text-foreground',
+            )}
           >
-            <X className="h-8 w-8" />
+            {torchOn ? <FlashlightOff className="h-8 w-8" /> : <Flashlight className="h-8 w-8" />}
           </button>
-          {torchAvailable && (
-            <button
-              type="button"
-              aria-label={torchOn ? t('camera.lightOff') : t('camera.light')}
-              aria-pressed={torchOn}
-              onClick={() => {
-                const next = !torchOn;
+          <button
+            type="button"
+            aria-label="2×"
+            aria-pressed={zoomed}
+            onClick={() => {
+              const next = !zoomed;
+              setZoomed(next);
+              if (hardwareZoom) {
+                const level = next ? Math.min(2, hardwareZoom.max) : Math.max(1, hardwareZoom.min);
                 void trackRef.current
-                  ?.applyConstraints({ advanced: [{ torch: next }] } as unknown as MediaTrackConstraints)
-                  .then(() => setTorchOn(next))
-                  .catch(() => setTorchAvailable(false));
-              }}
-              className={cn(
-                'absolute bottom-[max(2rem,env(safe-area-inset-bottom))] left-1/2 flex h-16 w-16 -translate-x-1/2 items-center justify-center rounded-full active:scale-95',
-                torchOn ? 'bg-yellow-300 text-black' : 'bg-black/60 text-white',
-              )}
-            >
-              {torchOn ? <FlashlightOff className="h-8 w-8" /> : <Flashlight className="h-8 w-8" />}
-            </button>
-          )}
+                  ?.applyConstraints({ advanced: [{ zoom: level }] } as unknown as MediaTrackConstraints)
+                  .catch(() => setHardwareZoom(null));
+              }
+            }}
+            className={cn(
+              'flex h-16 w-16 items-center justify-center rounded-full text-xl font-black active:scale-95',
+              zoomed ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground',
+            )}
+          >
+            {zoomed ? '1×' : '2×'}
+          </button>
         </div>
       )}
 
-      {active && !fullscreen && (
+      {active && !square && (
         <div className="relative overflow-hidden rounded-lg border bg-black">
           <video ref={videoRef} playsInline muted className="h-56 w-full object-cover" />
           {/* A narrow guide: holding the symbol across the frame is what gets
