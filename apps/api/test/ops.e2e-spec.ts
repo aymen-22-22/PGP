@@ -64,9 +64,6 @@ describe('Warehouse operations: scan, receive, send', () => {
     expect(scan.body).toMatchObject({ status: 'INCOMING', source: 'TRANSFER' });
     await as(app, jean).post('/api/v1/ops/receive').send({ code: label.code }).expect(200);
     expect((await as(app, jean).get('/api/v1/ops/incoming').expect(200)).body.total).toBe(0);
-
-    const activity = await as(app, jean).get('/api/v1/ops/activity').expect(200);
-    expect(activity.body.data[0]).toMatchObject({ type: 'TRANSFER_IN', count: 1, product: { id: fixture.product.id } });
   });
 
   it('says when a code is unknown or belongs elsewhere', async () => {

@@ -9,25 +9,15 @@ interface Incoming {
   items: { product: { id: string; name: string; imageUrl: string | null }; toReceive: number }[];
 }
 
-interface Step {
-  type: string;
-  at: string;
-  count: number;
-  from: string | null;
-  to: string | null;
-  product: { id: string; name: string };
-}
-
 /**
- * A warehouse account's home: the scanner first, then what is coming, what is
- * on the shelf and what just happened. No sales, no money, no charts.
+ * A warehouse account's home: the scanner first, then what is coming and what
+ * is on the shelf. No sales, no money, no charts.
  */
 export default function WarehouseHome() {
-  const { t, n, dateTime } = useI18n();
+  const { t, n } = useI18n();
   const user = useAuth((s) => s.user);
   const incoming = useApiQuery<Incoming>('/ops/incoming', { refetchInterval: 60_000 });
   const dashboard = useApiQuery<{ totals: { available: number } }>('/reports/dashboard');
-  const activity = useApiQuery<{ data: Step[] }>('/ops/activity', { refetchInterval: 60_000 });
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
@@ -88,26 +78,6 @@ export default function WarehouseHome() {
         </section>
       )}
 
-      {activity.data && activity.data.data.length > 0 && (
-        <section className="space-y-2">
-          <div className="flex items-baseline justify-between">
-            <h2 className="font-semibold">{t('whHome.recent')}</h2>
-            <Link to="/activity" className="text-sm font-medium text-primary">
-              {t('whHome.seeAll')}
-            </Link>
-          </div>
-          <ul className="divide-y rounded-xl border bg-card text-sm">
-            {activity.data.data.slice(0, 5).map((step, i) => (
-              <li key={`${step.at}-${i}`} className="px-3 py-2.5">
-                <p className="font-medium">
-                  {t(`journey.move.${step.type}`, { to: step.to ?? step.from ?? '' })} · {step.product.name} ×{step.count}
-                </p>
-                <p className="text-xs text-muted-foreground">{dateTime(step.at)}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
     </div>
   );
 }

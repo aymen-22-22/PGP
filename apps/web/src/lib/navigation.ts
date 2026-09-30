@@ -100,7 +100,7 @@ export const NAV_SECTIONS: NavSection[] = [
  * A warehouse account works the floor: scan, receive, send, stock. Everything
  * else stays with the administrators.
  */
-const WAREHOUSE_PAGES = ['/', '/stock', '/scanner', '/activity'];
+const WAREHOUSE_PAGES = ['/', '/stock', '/scanner'];
 
 /** The sections this user may actually open, with empty sections dropped. */
 export function navigationFor(user: AuthUser | null): NavSection[] {
@@ -136,9 +136,9 @@ export function navigationExcluding(user: AuthUser | null, exclude: string[]): N
  */
 export const sellsAtCounter = (user: AuthUser | null): boolean => user?.countryCode === 'DZ';
 
-/** The five destinations on the phone's bottom bar, for this user. */
+/** The destinations on the phone's bottom bar, for this user. */
 export const bottomTabsFor = (user: AuthUser | null): string[] =>
   isAdmin(user)
     ? ['/purchases', sellsAtCounter(user) ? '/pos' : '/sales', '/scan', '/transfers', '/stock']
-    : // Home, stock, the scanner in the middle, what happened, and settings.
-      ['/', '/stock', '/scanner', '/activity', '/more'];
+    : // Home, the scanner, stock and settings — nothing else.
+      ['/', '/scanner', '/stock', '/more'];
