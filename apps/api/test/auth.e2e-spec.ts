@@ -45,6 +45,17 @@ describe('Authentication (spec §23)', () => {
     expect(csrf).not.toContain('HttpOnly');
   });
 
+  it('keeps a warehouse phone signed in for 30 days, an admin only briefly', async () => {
+    const maxAge = async (email: string) => {
+      const res = await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email, password: PASSWORD }).expect(200);
+      const session = (res.headers['set-cookie'] as unknown as string[]).find((c) => c.startsWith('perp_token='))!;
+      return Number(/Max-Age=(\d+)/.exec(session)![1]);
+    };
+    expect(await maxAge(fixture.jean.email)).toBe(30 * 24 * 3600);
+    // Office accounts keep the short session (JWT_EXPIRES_IN).
+    expect(await maxAge(fixture.admin.email)).toBeLessThan(24 * 3600);
+  });
+
   it('rejects an invalid password', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
