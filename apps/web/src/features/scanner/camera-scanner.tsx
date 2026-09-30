@@ -1,4 +1,4 @@
-import { Camera, CameraOff, Flashlight, FlashlightOff } from 'lucide-react';
+import { Camera, CameraOff, Flashlight, FlashlightOff, X } from 'lucide-react';
 
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -37,14 +37,15 @@ export function CameraScanner({
   active: controlled,
   onActiveChange,
   hideToggle = false,
-  tall = false,
+  fullscreen = false,
 }: {
   onDetect: (value: string) => void;
   /** Set to drive the camera from outside, e.g. from one big button. */
   active?: boolean;
   onActiveChange?: (active: boolean) => void;
   hideToggle?: boolean;
-  tall?: boolean;
+  /** Takes the whole screen, with a square guide that fits QR codes and barcodes alike. */
+  fullscreen?: boolean;
 }) {
   const { t } = useI18n();
   // Read from inside the camera callbacks, which outlive a render.
@@ -169,6 +170,15 @@ export function CameraScanner({
         // per bar and the decoder cannot resolve it — the same failure as
         // accepting a 640x480 capture, reintroduced by the downscale that used
         // to be here. Take the middle third of the height at full resolution.
+        if (fullscreen) {
+          // The square guide in the middle: a QR code is as tall as it is
+          // wide, so a thin band would cut it in half.
+          const side = Math.max(1, Math.round(Math.min(vw, vh) * 0.8));
+          scratch.width = side;
+          scratch.height = side;
+          scratchCtx.drawImage(video, Math.round((vw - side) / 2), Math.round((vh - side) / 2), side, side, 0, 0, side, side);
+          return scratch;
+        }
         const cropH = Math.max(1, Math.round(vh / 3));
         const cropY = Math.round((vh - cropH) / 2);
 
@@ -258,6 +268,12 @@ export function CameraScanner({
         const video = videoRef.current;
         if (!video) throw new Error('no video element');
         video.srcObject = stream;
+        // The light, where the phone has one: dark shelves are the usual reason
+        // a label will not read.
+        const track = stream.getVideoTracks()[0] ?? null;
+        trackRef.current = track;
+        const caps = (track?.getCapabilities?.() ?? {}) as { torch?: boolean };
+        setTorchAvailable(!!caps.torch);
         await video.play();
 
         if (nativeScanSupported()) {
@@ -292,7 +308,7 @@ export function CameraScanner({
       setTorchOn(false);
       stream?.getTracks().forEach((track) => track.stop());
     };
-  }, [active, onDetect]);
+  }, [active, onDetect, fullscreen]);
 
   if (!cameraScanSupported()) return null;
 
@@ -305,9 +321,50 @@ export function CameraScanner({
         </Button>
       )}
 
-      {active && (
+      {active && fullscreen && (
+        <div className="fixed inset-0 z-[45] bg-black">
+          <video ref={videoRef} playsInline muted className="h-full w-full object-cover" />
+          {/* Square guide with corner marks, for QR codes and barcodes alike. */}
+          <div className="pointer-events-none absolute left-1/2 top-1/2 aspect-square w-[78vmin] -translate-x-1/2 -translate-y-1/2 rounded-3xl shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]">
+            <span className="absolute -left-1 -top-1 h-12 w-12 rounded-tl-3xl border-l-[6px] border-t-[6px] border-white" />
+            <span className="absolute -right-1 -top-1 h-12 w-12 rounded-tr-3xl border-r-[6px] border-t-[6px] border-white" />
+            <span className="absolute -bottom-1 -left-1 h-12 w-12 rounded-bl-3xl border-b-[6px] border-l-[6px] border-white" />
+            <span className="absolute -bottom-1 -right-1 h-12 w-12 rounded-br-3xl border-b-[6px] border-r-[6px] border-white" />
+          </div>
+          <button
+            type="button"
+            aria-label={t('camera.stop')}
+            onClick={() => setActive(false)}
+            className="absolute end-4 top-[max(1rem,env(safe-area-inset-top))] flex h-14 w-14 items-center justify-center rounded-full bg-black/60 text-white active:scale-95"
+          >
+            <X className="h-8 w-8" />
+          </button>
+          {torchAvailable && (
+            <button
+              type="button"
+              aria-label={torchOn ? t('camera.lightOff') : t('camera.light')}
+              aria-pressed={torchOn}
+              onClick={() => {
+                const next = !torchOn;
+                void trackRef.current
+                  ?.applyConstraints({ advanced: [{ torch: next }] } as unknown as MediaTrackConstraints)
+                  .then(() => setTorchOn(next))
+                  .catch(() => setTorchAvailable(false));
+              }}
+              className={cn(
+                'absolute bottom-[max(2rem,env(safe-area-inset-bottom))] left-1/2 flex h-16 w-16 -translate-x-1/2 items-center justify-center rounded-full active:scale-95',
+                torchOn ? 'bg-yellow-300 text-black' : 'bg-black/60 text-white',
+              )}
+            >
+              {torchOn ? <FlashlightOff className="h-8 w-8" /> : <Flashlight className="h-8 w-8" />}
+            </button>
+          )}
+        </div>
+      )}
+
+      {active && !fullscreen && (
         <div className="relative overflow-hidden rounded-lg border bg-black">
-          <video ref={videoRef} playsInline muted className={cn('w-full object-cover', tall ? 'h-[50vh]' : 'h-56')} />
+          <video ref={videoRef} playsInline muted className="h-56 w-full object-cover" />
           {/* A narrow guide: holding the symbol across the frame is what gets
               enough pixels per bar to decode a dense Code 128. */}
           <div className="pointer-events-none absolute inset-x-4 top-1/2 h-20 -translate-y-1/2 rounded border-2 border-white/70" />
