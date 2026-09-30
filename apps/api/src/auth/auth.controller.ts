@@ -40,7 +40,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Sign in and receive an HTTP-only session cookie' })
   async login(@Body() dto: LoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const result = await this.auth.login(dto.email, dto.password, context(req));
-    this.setAuthCookies(res, result.accessToken, result.csrfToken);
+    this.setAuthCookies(res, result.accessToken, result.csrfToken, result.expiresIn);
     if (result.user.role === 'ADMIN') await this.rememberAppUrl(req);
     // The token is also returned for non-browser API clients.
     return { user: result.user, accessToken: result.accessToken, csrfToken: result.csrfToken };
@@ -101,8 +101,8 @@ export class AuthController {
     } as const;
   }
 
-  private setAuthCookies(res: Response, token: string, csrf: string): void {
-    const maxAge = parseExpiry(this.config.jwt.expiresIn);
+  private setAuthCookies(res: Response, token: string, csrf: string, expiresIn: string): void {
+    const maxAge = parseExpiry(expiresIn);
     res.cookie(this.config.cookie.name, token, { ...this.cookieOptions(), maxAge });
     // Readable by JavaScript on purpose: the client echoes it back in the
     // X-CSRF-Token header, which a cross-site attacker cannot do.

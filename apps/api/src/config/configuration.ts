@@ -5,7 +5,7 @@ export interface AppConfig {
   host: string;
   apiPrefix: string;
   databaseUrl: string;
-  jwt: { secret: string; expiresIn: string };
+  jwt: { secret: string; expiresIn: string; warehouseExpiresIn: string };
   cookie: {
     name: string;
     csrfName: string;
@@ -67,6 +67,9 @@ export function loadConfiguration(): AppConfig {
     jwt: {
       secret: process.env.JWT_SECRET ?? '',
       expiresIn: process.env.JWT_EXPIRES_IN ?? '12h',
+      // Warehouse phones stay signed in: nobody should type a password at the bench
+      // every morning. Changing the password or disabling the user still ends it.
+      warehouseExpiresIn: process.env.JWT_WAREHOUSE_EXPIRES_IN ?? '30d',
     },
     cookie: {
       name: process.env.AUTH_COOKIE_NAME ?? 'perp_token',

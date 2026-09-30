@@ -15,6 +15,8 @@ export interface LoginResult {
   user: AuthUser;
   accessToken: string;
   csrfToken: string;
+  /** How long the session lasts, e.g. '12h' or '30d'. */
+  expiresIn: string;
 }
 
 export interface RequestContext {
@@ -89,6 +91,7 @@ export class AuthService {
 
     await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
+    const expiresIn = user.role === 'WAREHOUSE_USER' ? this.config.jwt.warehouseExpiresIn : this.config.jwt.expiresIn;
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
@@ -125,7 +128,8 @@ export class AuthService {
         printerLabelSize: user.printerLabelSize,
         language: user.language,
       },
-      accessToken: this.jwt.sign(payload, { expiresIn: this.config.jwt.expiresIn }),
+      accessToken: this.jwt.sign(payload, { expiresIn }),
+      expiresIn,
       csrfToken: randomBytes(24).toString('hex'),
     };
   }
