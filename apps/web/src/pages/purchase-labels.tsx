@@ -129,7 +129,6 @@ export default function PurchaseLabelsPage() {
               product: label.product.name,
               sequence: label.sequence,
               of: label.of,
-              purchaseNumber: sheet.purchase.number,
               size: sizeId,
             }),
           });
@@ -157,7 +156,7 @@ export default function PurchaseLabelsPage() {
           code: label.code,
           name: label.product.name,
           subtitle: [label.product.storage, label.product.color].filter(Boolean).join(' · '),
-          footer: `${label.sequence}/${label.of} · ${sheet.purchase.number}`,
+          footer: `${label.sequence}/${label.of}`,
         })),
         size.width,
         size.height,
@@ -289,7 +288,7 @@ export default function PurchaseLabelsPage() {
                       {label.code}
                     </p>
                     <p className="w-full truncate leading-none" style={{ fontSize: mm(size.height * 0.05) }}>
-                      {label.sequence}/{label.of} · {sheet.purchase.number}
+                      {label.sequence}/{label.of}
                     </p>
                   </div>
                 </div>

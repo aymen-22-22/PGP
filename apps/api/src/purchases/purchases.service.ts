@@ -971,7 +971,6 @@ export class PurchasesService {
           product: l.purchaseItem.product,
           sequence: l.sequence,
           of: l.purchaseItem.quantity,
-          purchaseNumber: purchase.number,
         }),
       ),
     );

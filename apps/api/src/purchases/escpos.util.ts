@@ -12,7 +12,6 @@ export function buildLabelTicket(label: {
   product: { name: string; storage: string | null; color: string | null };
   sequence: number;
   of: number;
-  purchaseNumber: string;
 }): Buffer {
   const parts: Buffer[] = [];
   const text = (s: string) => parts.push(Buffer.from(s, 'utf8'));
@@ -49,7 +48,7 @@ export function buildLabelTicket(label: {
   bytes(0x0a);
   bytes(0x1b, 0x21, 0x00);
 
-  text(`${label.sequence}/${label.of} - ${label.purchaseNumber}`);
+  text(`${label.sequence}/${label.of}`);
   bytes(0x0a, 0x0a, 0x0a);
 
   bytes(0x1d, 0x56, 0x42, 0x00); // GS V B 0 — feed and partial cut
