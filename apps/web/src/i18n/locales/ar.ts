@@ -249,6 +249,8 @@ const ar: Record<string, string> = {
   'ops.flash.error': 'خطأ',
   'ops.left_one': 'المتبقي {count}',
   'ops.left_other': 'المتبقي {count}',
+  'ops.flash.removed': 'تمت الإزالة',
+  'ops.undo': 'تراجع',
   'nav.section.overview': 'نظرة عامة',
   'nav.section.inbound': 'الوارد',
   'nav.section.distribution': 'التوزيع',

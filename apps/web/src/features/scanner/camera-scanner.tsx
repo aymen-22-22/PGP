@@ -3,6 +3,7 @@ import { Camera, CameraOff, Flashlight, FlashlightOff } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useI18n } from '@/i18n/provider';
+import { cn } from '@/lib/utils';
 
 /**
  * Camera scanning with two backends:
@@ -31,13 +32,34 @@ const nativeScanSupported = (): boolean =>
 export const cameraScanSupported = (): boolean =>
   typeof window !== 'undefined' && !!navigator.mediaDevices;
 
-export function CameraScanner({ onDetect }: { onDetect: (value: string) => void }) {
+export function CameraScanner({
+  onDetect,
+  active: controlled,
+  onActiveChange,
+  hideToggle = false,
+  tall = false,
+}: {
+  onDetect: (value: string) => void;
+  /** Set to drive the camera from outside, e.g. from one big button. */
+  active?: boolean;
+  onActiveChange?: (active: boolean) => void;
+  hideToggle?: boolean;
+  tall?: boolean;
+}) {
   const { t } = useI18n();
   // Read from inside the camera callbacks, which outlive a render.
   const tr = useRef(t);
   tr.current = t;
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [active, setActive] = useState(false);
+  const [own, setOwn] = useState(false);
+  const active = controlled ?? own;
+  const setActive = (next: boolean | ((a: boolean) => boolean)) => {
+    const value = typeof next === 'function' ? next(active) : next;
+    if (onActiveChange) onActiveChange(value);
+    else setOwn(value);
+  };
+  const setActiveRef = useRef(setActive);
+  setActiveRef.current = setActive;
   const [torchOn, setTorchOn] = useState(false);
   const trackRef = useRef<MediaStreamTrack | null>(null);
   const [torchAvailable, setTorchAvailable] = useState(false);
@@ -256,7 +278,7 @@ export function CameraScanner({ onDetect }: { onDetect: (value: string) => void 
               : tr.current('camera.unavailable'),
         );
         setStatus(null);
-        setActive(false);
+        setActiveRef.current(false);
       }
     };
 
@@ -276,14 +298,16 @@ export function CameraScanner({ onDetect }: { onDetect: (value: string) => void 
 
   return (
     <div className="space-y-2">
-      <Button variant="outline" className="w-full gap-2" onClick={() => setActive((a) => !a)}>
-        {active ? <CameraOff className="h-5 w-5" /> : <Camera className="h-5 w-5" />}
-        {active ? t('camera.stop') : t('camera.start')}
-      </Button>
+      {!hideToggle && (
+        <Button variant="outline" className="w-full gap-2" onClick={() => setActive((a) => !a)}>
+          {active ? <CameraOff className="h-5 w-5" /> : <Camera className="h-5 w-5" />}
+          {active ? t('camera.stop') : t('camera.start')}
+        </Button>
+      )}
 
       {active && (
         <div className="relative overflow-hidden rounded-lg border bg-black">
-          <video ref={videoRef} playsInline muted className="h-56 w-full object-cover" />
+          <video ref={videoRef} playsInline muted className={cn('w-full object-cover', tall ? 'h-[50vh]' : 'h-56')} />
           {/* A narrow guide: holding the symbol across the frame is what gets
               enough pixels per bar to decode a dense Code 128. */}
           <div className="pointer-events-none absolute inset-x-4 top-1/2 h-20 -translate-y-1/2 rounded border-2 border-white/70" />

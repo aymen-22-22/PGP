@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DeviceStatus, PurchaseStatus, Role, TransferStatus } from '@prisma/client';
-import { ErrorCode, canSendBetween } from '@phone-erp/shared-types';
+import { AuditAction, ErrorCode, canSendBetween } from '@phone-erp/shared-types';
+import { AuditService } from '../audit/audit.service';
 import { BusinessError } from '../common/errors/business.error';
 import { DeviceScanService } from '../common/services/device-scan.service';
 import { WarehouseAccessService } from '../common/services/warehouse-access.service';
@@ -8,6 +9,9 @@ import type { RequestUser } from '../common/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { PurchasesService } from '../purchases/purchases.service';
 import { TransfersService } from '../transfers/transfers.service';
+
+/** How long a receipt can be taken back from the scanner's result screen. */
+const UNDO_WINDOW_MS = 60_000;
 
 type ProductCard = { id: string; name: string; imageUrl: string | null };
 
@@ -39,6 +43,7 @@ export class OpsService {
     private readonly scans: DeviceScanService,
     private readonly purchases: PurchasesService,
     private readonly transfers: TransfersService,
+    private readonly audit: AuditService,
   ) {}
 
   /** The warehouse the operation is for: a warehouse user's own; an admin must say. */
@@ -213,10 +218,75 @@ export class OpsService {
     }
     const warehouseId = this.warehouseFor(user, requested);
     return {
+      undoable: outcome.ref.kind === 'PURCHASE',
       code: outcome.code,
       product: outcome.product,
       remaining: await this.remainingFor(warehouseId, outcome.product.id),
     };
+  }
+
+  /**
+   * Takes back a purchase receipt made by mistake a moment ago. Only the person
+   * who scanned it, only within a minute, and only while the phone has done
+   * nothing else — the unit then simply goes back to "on its way".
+   */
+  async undoReceive(user: RequestUser, code: string) {
+    const label = await this.prisma.purchaseUnitLabel.findUnique({
+      where: { code: code.trim() },
+      select: {
+        id: true,
+        deviceId: true,
+        receivedAt: true,
+        receivedById: true,
+        purchaseItem: { select: { id: true, purchaseId: true } },
+      },
+    });
+    const tooLate =
+      !label?.deviceId || !label.receivedAt || Date.now() - label.receivedAt.getTime() > UNDO_WINDOW_MS;
+    if (!label || tooLate || label.receivedById !== user.id) {
+      throw new BusinessError(ErrorCode.VALIDATION_FAILED, 'This receipt can no longer be undone.');
+    }
+    const deviceId = label.deviceId!;
+    const device = await this.prisma.device.findUnique({
+      where: { id: deviceId },
+      select: { status: true, currentWarehouseId: true, _count: { select: { movements: true } } },
+    });
+    if (!device || device.status !== DeviceStatus.IN_STOCK || device._count.movements !== 1) {
+      throw new BusinessError(ErrorCode.VALIDATION_FAILED, 'This receipt can no longer be undone.');
+    }
+    this.access.assertAccess(user, device.currentWarehouseId!);
+
+    const purchaseId = label.purchaseItem.purchaseId;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.purchaseUnitLabel.update({
+        where: { id: label.id },
+        data: { deviceId: null, receivedAt: null, receivedById: null },
+      });
+      // The phone only existed for that minute; its receipt movement goes with it.
+      await tx.device.delete({ where: { id: deviceId } });
+      await tx.purchaseItem.update({
+        where: { id: label.purchaseItem.id },
+        data: { receivedQuantity: { decrement: 1 } },
+      });
+      const lines = await tx.purchaseItem.findMany({
+        where: { purchaseId },
+        select: { quantity: true, receivedQuantity: true },
+      });
+      const all = lines.every((l) => l.receivedQuantity >= l.quantity);
+      const any = lines.some((l) => l.receivedQuantity > 0);
+      await tx.purchase.update({
+        where: { id: purchaseId },
+        data: { status: all ? PurchaseStatus.RECEIVED : any ? PurchaseStatus.PARTIALLY_RECEIVED : PurchaseStatus.ORDERED },
+      });
+    });
+    await this.audit.log({
+      userId: user.id,
+      action: AuditAction.UNDO_RECEIVE,
+      entityType: 'Purchase',
+      entityId: purchaseId,
+      metadata: { label: code.trim(), deviceId },
+    });
+    return { ok: true };
   }
 
   /** "Envoyer": one transfer for everything scanned, created and shipped in one go. */
