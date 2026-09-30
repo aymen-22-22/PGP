@@ -296,7 +296,7 @@ export default function ScannerPage() {
               </Button>
             }
           />
-          {cameraOn && <CameraScanner active hideToggle onActiveChange={setCameraOn} onDetect={onDetect} />}
+          {cameraOn && <CameraScanner active fullscreen hideToggle onActiveChange={setCameraOn} onDetect={onDetect} />}
 
           {sendLines.length > 0 && (
             <section className="space-y-3 rounded-xl border-2 border-orange-300 bg-orange-50/60 p-4 dark:bg-orange-950/20">
@@ -407,7 +407,7 @@ export default function ScannerPage() {
       )}
 
       {undo && !flash && (
-        <div className="fixed inset-x-0 bottom-20 z-40 flex justify-center px-4">
+        <div className="fixed inset-x-0 bottom-28 z-50 flex justify-center px-4">
           <div className="flex w-full max-w-md items-center gap-3 rounded-2xl bg-foreground p-2 text-background shadow-xl">
             {undo.product && <Thumb product={undo.product} size="sm" />}
             <span className="min-w-0 flex-1 truncate text-sm">{undo.product?.name}</span>
