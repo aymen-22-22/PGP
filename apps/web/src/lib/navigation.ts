@@ -141,4 +141,4 @@ export const bottomTabsFor = (user: AuthUser | null): string[] =>
   isAdmin(user)
     ? ['/purchases', sellsAtCounter(user) ? '/pos' : '/sales', '/scan', '/transfers', '/stock']
     : // The scanner, stock and settings — nothing else.
-      ['/scanner', '/stock', '/more'];
+      ['/stock', '/scanner', '/more'];

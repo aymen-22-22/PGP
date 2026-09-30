@@ -60,8 +60,8 @@ const SELLING_TABS = TABS.map((tab) =>
  * the API refuses a sale from this account anyway.
  */
 const WAREHOUSE_TABS: Tab[] = [
-  { to: '/scanner', label: 'nav.scanner', icon: ScanLine, centre: true },
   { to: '/stock', label: 'nav.stock', icon: Package },
+  { to: '/scanner', label: 'nav.scanner', icon: ScanLine, centre: true },
   { to: '/more', label: 'nav.settings', icon: Settings },
 ];
 
