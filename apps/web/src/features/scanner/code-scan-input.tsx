@@ -22,6 +22,7 @@ export function CodeScanInput({
   autoFocus = true,
   disabled,
   camera = true,
+  compact = false,
 }: {
   onScan: (code: string) => void;
   outcome: CodeOutcome | null;
@@ -30,6 +31,8 @@ export function CodeScanInput({
   disabled?: boolean;
   /** Off only where the camera would be in the way. */
   camera?: boolean;
+  /** No title, status line, flash or sound caption: the page shows its own result. */
+  compact?: boolean;
 }) {
   const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -66,7 +69,10 @@ export function CodeScanInput({
 
   return (
     <div className="space-y-3">
-      <label htmlFor="code-scan-input" className="flex items-center gap-2 text-sm font-semibold">
+      <label
+        htmlFor="code-scan-input"
+        className={cn('flex items-center gap-2 text-sm font-semibold', compact && 'sr-only')}
+      >
         <Keyboard className="h-4 w-4 text-muted-foreground" aria-hidden />
         {label ?? t('receiveScan.input')}
       </label>
@@ -96,7 +102,7 @@ export function CodeScanInput({
         </Button>
       </div>
 
-      <CodeFeedback key={flashKey} outcome={outcome} />
+      {!compact && <CodeFeedback key={flashKey} outcome={outcome} />}
 
       {/* Three ways in, because a warehouse has all three: the gun above
           (caught at the document), the phone camera here, and typing the code
@@ -114,10 +120,11 @@ export function CodeScanInput({
             scanFeedback('accepted');
           }
         }}
+        aria-label={mutedUi ? t('scan.soundOff') : t('scan.soundOn')}
         className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
       >
         {mutedUi ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-        {mutedUi ? t('scan.soundOff') : t('scan.soundOn')}
+        {!compact && (mutedUi ? t('scan.soundOff') : t('scan.soundOn'))}
       </button>
     </div>
   );

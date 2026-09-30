@@ -1,5 +1,5 @@
 import { Suspense, lazy, type ReactNode } from 'react';
-import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { LoadingState } from '@/components/ui/states';
 import { useIsDesktop } from '@/hooks/use-media-query';
 import { DesktopLayout } from '@/layouts/desktop-layout';
@@ -65,6 +65,19 @@ function RequireAdmin({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Warehouse staff only get the scanner, stock and settings. Any other address
+ * (an old bookmark to /receive, /transfers…) lands on the scanner.
+ */
+const WAREHOUSE_ALLOWED = [/^\/$/, /^\/scanner$/, /^\/stock(\/|$)/, /^\/more$/, /^\/imei\//, /^\/purchases\/[^/]+\/labels$/];
+
+function WarehouseGuard() {
+  const user = useAuth((s) => s.user);
+  const { pathname } = useLocation();
+  if (!isAdmin(user) && !WAREHOUSE_ALLOWED.some((re) => re.test(pathname))) return <Navigate to="/scanner" replace />;
+  return <Outlet />;
+}
+
 export function AppRouter() {
   const user = useAuth((s) => s.user);
   const isDesktop = useIsDesktop();
@@ -96,7 +109,7 @@ export function AppRouter() {
         <Route
           element={
             <Suspense fallback={<LoadingState />}>
-              <Outlet />
+              <WarehouseGuard />
             </Suspense>
           }
         >
